@@ -83,6 +83,8 @@ def me():
         "secret_set": bool(config.DISCOUNT_API_SECRET),
         "api_url": config.DISCOUNT_API_URL,
         "shop_url": config.SHOP_URL,
+        "otp_required": config.OTP_REQUIRED,
+        "sms_mode": config.SMS_MODE,
     }
 
 

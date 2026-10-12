@@ -8,6 +8,8 @@ os.environ["DISCOUNT_MODE"] = "mock"
 os.environ["DISCOUNT_API_SECRET"] = ""
 os.environ["ADMIN_PASSWORD"] = "test-pass"
 os.environ["TRUST_PROXY"] = "0"
+os.environ["OTP_REQUIRED"] = "0"
+os.environ["SMS_MODE"] = "mock"
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import pytest

@@ -124,6 +124,19 @@ body {
 .closed { text-align: center; padding: 36px 10px; color: var(--dark-4); }
 .hidden { display: none !important; }
 
+/* ---------------- SMS code + notices */
+.otp { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--light-2); }
+.otp p { margin: 0 0 10px; font-size: 13px; color: var(--dark-3); }
+.otp-input { letter-spacing: 10px; font-size: 24px; }
+.otp-links { display: flex; justify-content: space-between; }
+.otp-links .link { width: auto; margin-top: 12px; }
+.link[disabled] { color: var(--dark-5); text-decoration: none; cursor: default; }
+.notice {
+  background: #fff8db; color: #7a5b00; border-radius: var(--radius); padding: 8px 12px;
+  font-size: 12px; margin: 0 0 12px; border-inline-start: 3px solid var(--warning);
+}
+.sheet .notice { margin: 8px 0; }
+
 /* ---------------- wheel */
 .wheel-wrap { position: relative; width: min(320px, 100%); margin: 8px auto 4px; aspect-ratio: 1; }
 .wheel-wrap svg.wheel { width: 100%; height: 100%; transition: transform 5.2s cubic-bezier(.12, .7, .08, 1); filter: drop-shadow(0 8px 18px rgba(242, 102, 0, .18)); }

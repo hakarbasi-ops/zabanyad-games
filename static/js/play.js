@@ -27,6 +27,10 @@
       return;
     }
     ({ wheel: renderWheel, scratch: renderScratch, quiz: renderQuiz })[info.kind]();
+    if (info.test_mode) {
+      app.before(el("p", { class: "notice" },
+        "حالت آزمایشی: کدهای تخفیف این صفحه ساختگی‌اند (با T شروع می‌شوند) و در زبانیاد کار نمی‌کنند."));
+    }
   }
 
   // ------------------------------------------------------------ shared pieces
@@ -75,13 +79,108 @@
     }
     store.set("zg:mobile", mobile);
     button.disabled = true;
+    let otp_token = null;
+    if (info.otp) {
+      otp_token = await verifyMobile(mobile, input, box, button);
+      if (!otp_token) {
+        button.disabled = false;
+        return null;
+      }
+    }
     try {
-      return { mobile, res: await api(path, { method: "POST", body: { mobile, ...(extraBody || {}) } }) };
+      return { mobile, res: await api(path, { method: "POST", body: { mobile, otp_token, ...(extraBody || {}) } }) };
     } catch (e) {
+      if (e.code === "need_otp") store.set("zg:otp", null);
       showError(box, e);
       button.disabled = false;
       return null;
     }
+  }
+
+  // ------------------------------------------------------------ SMS code (proves the mobile is the player's)
+
+  async function verifyMobile(mobile, input, box, button) {
+    const saved = store.get("zg:otp");
+    if (saved && saved.mobile === mobile && saved.until > Date.now() + 60000) return saved.token;
+
+    let sent;
+    try {
+      sent = await api("/api/otp/send", { method: "POST", body: { mobile } });
+    } catch (e) {
+      showError(box, e);
+      return null;
+    }
+
+    return new Promise((resolve) => {
+      const field = input.closest(".field");
+      const code = el("input", {
+        class: "input otp-input", type: "text", inputmode: "numeric", autocomplete: "one-time-code",
+        maxlength: String(sent.digits || 5), placeholder: "–".repeat(sent.digits || 5),
+      });
+      const ok = el("button", { class: "btn", type: "button" }, "تأیید و ادامه");
+      const resend = el("button", { class: "link", type: "button", disabled: true });
+      const change = el("button", { class: "link", type: "button" }, "تغییر شماره");
+      const err = errorBox();
+      const panel = el("div", { class: "otp" },
+        el("p", {}, `کد ${fa(sent.digits || 5)} رقمی‌ای که به ${fa(mobile)} پیامک شد را وارد کنید.`),
+        sent.test_code ? el("p", { class: "notice" }, `حالت آزمایشی (بدون پیامک): کد شما ${fa(sent.test_code)}`) : "",
+        code, ok, err, el("div", { class: "otp-links" }, resend, change));
+      field.after(panel);
+      button.classList.add("hidden");
+      input.disabled = true;
+      code.focus();
+
+      let left = sent.resend_after || 60;
+      const timer = setInterval(() => {
+        left -= 1;
+        resend.disabled = left > 0;
+        resend.textContent = left > 0 ? `ارسال دوباره (${fa(left)})` : "ارسال دوباره‌ی کد";
+        if (left <= 0) clearInterval(timer);
+      }, 1000);
+      resend.textContent = `ارسال دوباره (${fa(left)})`;
+
+      const finish = (token) => {
+        clearInterval(timer);
+        panel.remove();
+        button.classList.remove("hidden");
+        input.disabled = false;
+        resolve(token);
+      };
+      const submit = async () => {
+        err.classList.add("hidden");
+        const value = code.value.replace(/[۰-۹]/g, (d) => "۰۱۲۳۴۵۶۷۸۹".indexOf(d)).replace(/\D/g, "");
+        if (value.length < (sent.digits || 5)) {
+          showError(err, { message: "کد را کامل وارد کنید." });
+          return;
+        }
+        ok.disabled = true;
+        try {
+          const r = await api("/api/otp/verify", { method: "POST", body: { mobile, code: value } });
+          store.set("zg:otp", { mobile, token: r.token, until: Date.now() + r.valid_minutes * 60000 });
+          finish(r.token);
+        } catch (e) {
+          showError(err, e);
+          ok.disabled = false;
+        }
+      };
+      ok.addEventListener("click", submit);
+      code.addEventListener("keydown", (e) => e.key === "Enter" && submit());
+      code.addEventListener("input", () => {
+        const digits = code.value.replace(/[۰-۹]/g, (d) => "۰۱۲۳۴۵۶۷۸۹".indexOf(d)).replace(/\D/g, "");
+        if (digits.length === (sent.digits || 5)) submit();
+      });
+      change.addEventListener("click", () => finish(null));
+      resend.addEventListener("click", async () => {
+        try {
+          const again = await api("/api/otp/send", { method: "POST", body: { mobile } });
+          if (again.test_code) panel.querySelector(".notice").textContent = `حالت آزمایشی (بدون پیامک): کد شما ${fa(again.test_code)}`;
+          left = again.resend_after || 60;
+          resend.disabled = true;
+        } catch (e) {
+          showError(err, e);
+        }
+      });
+    });
   }
 
   function remember(res, mobile) {
@@ -375,6 +474,7 @@
         el("h2", {}, `تبریک، ${res.prize_label} بردی!`),
         res.total ? el("div", { class: "pill" }, "امتیاز:", el("span", {}, `${fa(res.score)}/${fa(res.total)}`)) : "",
         el("div", { class: "code-box" }, el("b", {}, res.code), copyBtn),
+        info.test_mode ? el("p", { class: "notice" }, "این کد آزمایشی است و در زبانیاد کار نمی‌کند.") : "",
         el("p", { class: "muted" }, `این کد روی شماره‌ی ${fa(res.mobile || "")} فعال شده و تا ${jalaliDate(res.valid_until)} اعتبار دارد.`),
         el("a", { class: "btn", href: info.shop_url, target: "_blank", rel: "noopener" }, "استفاده از کد در زبانیاد"),
       );

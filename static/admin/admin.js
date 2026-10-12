@@ -482,6 +482,9 @@
           el("tr", {}, el("th", {}, "حالت"), el("td", {}, me.mode === "live" ? el("span", { class: "badge ok" }, "واقعی") : el("span", { class: "badge warn" }, "آزمایشی (کد ساختگی)"))),
           el("tr", {}, el("th", {}, "کلید API"), el("td", {}, me.secret_set ? el("span", { class: "badge ok" }, "تنظیم شده") : el("span", { class: "badge bad" }, "تنظیم نشده"))),
           el("tr", {}, el("th", {}, "نشانی API"), el("td", { class: "ltr small" }, me.api_url)),
+          el("tr", {}, el("th", {}, "تأیید شماره با پیامک"), el("td", {}, !me.otp_required ? el("span", { class: "badge off" }, "خاموش")
+            : me.sms_mode === "mock" ? el("span", { class: "badge warn" }, "روشن، آزمایشی (کد روی صفحه نشان داده می‌شود)")
+            : el("span", { class: "badge ok" }, "روشن"))),
           el("tr", {}, el("th", {}, "سایت استفاده از کد"), el("td", { class: "ltr small" }, me.shop_url)))),
         el("p", { class: "muted small" }, "این تنظیمات فقط روی سرور (فایل ‎.env‎) عوض می‌شوند؛ کلید هیچ‌وقت در پنل نشان داده نمی‌شود.")),
       el("div", { class: "card" }, el("h2", {}, "آزمایش ساخت کد"),

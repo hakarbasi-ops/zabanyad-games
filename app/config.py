@@ -49,6 +49,11 @@ TIMEZONE = env("TIMEZONE", "Asia/Tehran")
 
 ADMIN_PASSWORD = env("ADMIN_PASSWORD")
 
+# Players confirm their mobile with an SMS code before playing.
+OTP_REQUIRED = env("OTP_REQUIRED", "1") == "1"
+# "mock" = no SMS, the code is shown on the page (testing only); the real sender is added in otp._deliver.
+SMS_MODE = env("SMS_MODE", "mock").lower()
+
 # Max game attempts (plays + quiz starts) from one IP per hour.
 IP_PLAYS_PER_HOUR = int(env("IP_PLAYS_PER_HOUR", "30"))
 # Behind nginx / a CDN the real client IP is in X-Forwarded-For.

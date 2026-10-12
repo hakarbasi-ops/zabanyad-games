@@ -71,6 +71,17 @@ CREATE TABLE IF NOT EXISTS plays (
 CREATE INDEX IF NOT EXISTS plays_game_mobile ON plays(game_id, mobile, created_at);
 CREATE INDEX IF NOT EXISTS plays_game_created ON plays(game_id, created_at);
 CREATE UNIQUE INDEX IF NOT EXISTS plays_token ON plays(token) WHERE token IS NOT NULL;
+CREATE TABLE IF NOT EXISTS otps (
+    id INTEGER PRIMARY KEY,
+    mobile TEXT NOT NULL,
+    code_hash TEXT NOT NULL,
+    tries INTEGER NOT NULL DEFAULT 0,
+    used INTEGER NOT NULL DEFAULT 0,
+    ip TEXT,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS otps_mobile ON otps(mobile, created_at);
 """
 
 # Serialises the "check limits + reserve prize" step so two requests cannot both take the last prize.

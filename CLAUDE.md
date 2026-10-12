@@ -27,6 +27,13 @@ amount, max_amount, usage_count, start_date/end_date `YYYY-MM-DD HH:mm:ss` (Tehr
 401 bad secret, 404 user not found (→ "sign up first", play not counted, prize stock released), 500.
 Amounts are RIALS (confirmed); the panel shows the toman value under each amount. Prize labels shown to players may say toman.
 
+## SMS verification (`app/otp.py`)
+Owner wants each player's mobile confirmed by SMS before playing. `/api/otp/send` → 5-digit code (2 min, resend after
+60 s, 5/hour per mobile, 20/hour per IP, 5 wrong tries), `/api/otp/verify` → signed token (30 min) bound to the mobile;
+play/quiz-start require it when `OTP_REQUIRED=1`. `SMS_MODE=mock` returns the code to the page (testing). The real
+sender (`otp._deliver`) is NOT written yet: waiting for the SMS/OTP API doc (Zabanyad's own or their SMS panel).
+Game pages show a yellow "test mode" notice while `DISCOUNT_MODE=mock` (codes start with T and do not work).
+
 ## Production
 New ArvanCloud server (Ubuntu 24.04, min 1 vCPU / 1 GB / 20 GB), `games.zabanyad.com` behind Arvan CDN (origin HTTP:80).
 Iranian servers may not reach PyPI/Docker Hub: `deploy/install.sh` installs from `deploy/wheels` (cp312 manylinux;

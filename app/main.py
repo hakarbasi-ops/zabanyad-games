@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import admin, config, db, games
+from . import admin, config, db, discount, games, otp
 from .util import normalize_mobile
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -87,11 +87,18 @@ def list_open_games():
 def game_info(slug: str):
     with db.session() as conn:
         view = games.public_view(conn, games.get_game(conn, slug))
-        return {**view, "shop_url": config.SHOP_URL, "signup_url": config.SIGNUP_URL}
+        return {**view, "shop_url": config.SHOP_URL, "signup_url": config.SIGNUP_URL,
+                "otp": otp.required(), "test_mode": discount.mode() == "mock"}
 
 
 class MobileIn(BaseModel):
     mobile: str
+    otp_token: str | None = None
+
+
+class OtpVerifyIn(BaseModel):
+    mobile: str
+    code: str
 
 
 def _mobile(raw: str) -> str:
@@ -101,16 +108,30 @@ def _mobile(raw: str) -> str:
     return mobile
 
 
+@app.post("/api/otp/send")
+def otp_send(body: MobileIn, request: Request):
+    return otp.send(_mobile(body.mobile), admin.client_ip(request))
+
+
+@app.post("/api/otp/verify")
+def otp_verify(body: OtpVerifyIn):
+    return otp.verify(_mobile(body.mobile), body.code)
+
+
 @app.post("/api/games/{slug}/play")
 def play(slug: str, body: MobileIn, request: Request):
+    mobile = _mobile(body.mobile)
+    otp.check(mobile, body.otp_token)
     with db.session() as conn:
-        return games.play_chance(conn, slug, _mobile(body.mobile), admin.client_ip(request))
+        return games.play_chance(conn, slug, mobile, admin.client_ip(request))
 
 
 @app.post("/api/games/{slug}/quiz/start")
 def quiz_start(slug: str, body: MobileIn, request: Request):
+    mobile = _mobile(body.mobile)
+    otp.check(mobile, body.otp_token)
     with db.session() as conn:
-        return games.quiz_start(conn, slug, _mobile(body.mobile), admin.client_ip(request))
+        return games.quiz_start(conn, slug, mobile, admin.client_ip(request))
 
 
 class QuizFinishIn(BaseModel):
