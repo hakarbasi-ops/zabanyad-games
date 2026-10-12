@@ -1,0 +1,15 @@
+# Without Docker: app in /opt/zabanyad-games with a venv in /opt/zabanyad-games/.venv
+[Unit]
+Description=Zabanyad discount games
+After=network.target
+
+[Service]
+WorkingDirectory=/opt/zabanyad-games
+EnvironmentFile=/opt/zabanyad-games/.env
+Environment=DATA_DIR=/opt/zabanyad-games/data
+ExecStart=/opt/zabanyad-games/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+Restart=always
+User=www-data
+
+[Install]
+WantedBy=multi-user.target
