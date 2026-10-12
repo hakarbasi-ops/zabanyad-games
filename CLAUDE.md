@@ -35,7 +35,7 @@ sender (`otp._deliver`) is NOT written yet: waiting for the SMS/OTP API doc (Zab
 Game pages show a yellow "test mode" notice while `DISCOUNT_MODE=mock` (codes start with T and do not work).
 
 ## Production
-ArvanCloud server 85.198.52.230 (Ubuntu 24.04, min 1 vCPU / 1 GB / 20 GB), `games.zabanyad.com`. Owner deploys v1-2 himself (scp+ssh from a Mac; I cannot reach the server).
+ArvanCloud server 85.198.52.230 (Ubuntu 24.04, min 1 vCPU / 1 GB / 20 GB), `games.zabanyad.com`. Owner deploys himself as root (scp+ssh from a Mac, files in ~/Downloads; I cannot reach the server): always give commands with root@85.198.52.230, no sudo.
 Iranian servers may not reach PyPI/Docker Hub: `deploy/install.sh` installs from `deploy/wheels` (cp312 manylinux;
 refresh with `pip download ... --python-version 3.12 --only-binary=:all:` when requirements change) into
 /opt/zabanyad-games (.venv, data/, backups/, .env read by the app itself, not systemd). Release = bump `app/VERSION`,
