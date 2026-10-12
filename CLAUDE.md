@@ -35,12 +35,17 @@ sender (`otp._deliver`) is NOT written yet: waiting for the SMS/OTP API doc (Zab
 Game pages show a yellow "test mode" notice while `DISCOUNT_MODE=mock` (codes start with T and do not work).
 
 ## Production
-New ArvanCloud server (Ubuntu 24.04, min 1 vCPU / 1 GB / 20 GB), `games.zabanyad.com` behind Arvan CDN (origin HTTP:80).
+ArvanCloud server 85.198.52.230 (Ubuntu 24.04, min 1 vCPU / 1 GB / 20 GB), `games.zabanyad.com`. Owner deploys v1-2 himself (scp+ssh from a Mac; I cannot reach the server).
 Iranian servers may not reach PyPI/Docker Hub: `deploy/install.sh` installs from `deploy/wheels` (cp312 manylinux;
 refresh with `pip download ... --python-version 3.12 --only-binary=:all:` when requirements change) into
 /opt/zabanyad-games (.venv, data/, backups/, .env read by the app itself, not systemd). Release = bump `app/VERSION`,
 commit, `bash deploy/make-package.sh` → `dist/zabanyad-games-<N>.zip` (single top folder `zabanyad-games/`), send it;
 steps for the owner in `docs/deploy-fa.md`. Secrets only via `deploy/set-credentials.sh` on the server.
+DNS of zabanyad.com is on CLOUDFLARE (not Arvan). First try gave Cloudflare 521 (SSL mode Full → origin:443 closed,
+and/or Iranian server not reachable from abroad). HTTPS: `deploy/enable-https.sh` (Let's Encrypt; webroot, else DNS-01
+via a Cloudflare token typed on the server into /root/.secrets/cloudflare.ini). `deploy/nginx-setup.sh` writes
+nginx-ssl.conf when /etc/letsencrypt/live/games.zabanyad.com exists, else nginx.conf (snippets: maps + app);
+install.sh calls it, so updates keep HTTPS. Visitor IP: CF-Connecting-IP > ar-real-ip > remote_addr.
 
 ## Rules
 - The server decides every result; the page only animates it. Never send prize odds/answers that let a client choose.

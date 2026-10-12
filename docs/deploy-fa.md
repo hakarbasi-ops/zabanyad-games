@@ -54,6 +54,22 @@ bash /root/zabanyad-games/deploy/install.sh
 bash /opt/zabanyad-games/deploy/set-credentials.sh
 ```
 
+## ۳٫۵. فعال کردن HTTPS (گواهی رایگان)
+
+روی سرور بزنید:
+
+```bash
+sudo bash /opt/zabanyad-games/deploy/enable-https.sh
+```
+
+- یک ایمیل می‌پرسد (برای هشدار انقضا). می‌توانید Enter بزنید.
+- اول از راه معمول (بررسی از طریق پورت ۸۰) گواهی می‌گیرد. برای این کار رکورد `games` باید به IP سرور اشاره کند.
+- اگر نشد (معمولاً چون ترافیک خارج به سرور ایرانی نمی‌رسد)، پیشنهاد راه دوم را می‌دهد: بررسی از طریق DNS کلودفلر با یک «API Token».
+  - در Cloudflare: My Profile ← API Tokens ← Create Token ← قالب «Edit zone DNS» ← zone: zabanyad.com
+  - توکن را همان‌جا روی سرور وارد کنید، نه در چت.
+- گواهی خودکار تمدید می‌شود و با به‌روزرسانی‌ها از بین نمی‌رود.
+- اگر ابر نارنجی کلودفلر روشن است، SSL را روی **Full (strict)** بگذارید.
+
 ## ۴. بعد از نصب
 
 ۱. نشانی `https://games.zabanyad.com/admin` را باز کنید و با رمز وارد شوید.

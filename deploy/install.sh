@@ -50,11 +50,7 @@ systemctl enable -q $SVC
 systemctl restart $SVC
 
 echo "==> nginx"
-cp "$APP/deploy/nginx.conf" /etc/nginx/sites-available/$SVC
-ln -sf /etc/nginx/sites-available/$SVC /etc/nginx/sites-enabled/$SVC
-rm -f /etc/nginx/sites-enabled/default
-nginx -t -q
-systemctl reload nginx || systemctl restart nginx
+bash "$APP/deploy/nginx-setup.sh"
 
 echo "==> Daily database backup (03:30, keeps 14 days)"
 cat > /etc/cron.d/$SVC-backup <<CRON
@@ -65,8 +61,10 @@ sleep 2
 if curl -fsS http://127.0.0.1:8000/healthz >/dev/null; then
   echo
   echo "Done. Version $(cat "$APP/app/VERSION")."
-  echo "  Games: http://games.zabanyad.com/"
-  echo "  Panel: http://games.zabanyad.com/admin"
+  if [ -d /etc/letsencrypt/live/games.zabanyad.com ]; then P=https; else P=http; fi
+  echo "  Games: $P://games.zabanyad.com/"
+  echo "  Panel: $P://games.zabanyad.com/admin"
+  [ "$P" = http ] && echo "  HTTPS: sudo bash $APP/deploy/enable-https.sh"
 else
   echo "The service did not answer. Last log lines:"
   journalctl -u $SVC -n 30 --no-pager
