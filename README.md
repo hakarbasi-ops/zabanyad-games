@@ -35,6 +35,10 @@
 
 ## اجرا
 
+نصب روی سرور آروان: `docs/deploy-fa.md` (بدون نیاز به اینترنت خارج؛ `deploy/install.sh`).
+
+با Docker (جایی که Docker Hub در دسترس است):
+
 ```bash
 cp .env.example .env        # ADMIN_PASSWORD و DISCOUNT_API_SECRET را روی سرور پر کنید
 docker compose up -d --build

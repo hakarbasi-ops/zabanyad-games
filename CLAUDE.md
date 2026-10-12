@@ -21,11 +21,19 @@ test), result as a bottom sheet (Daily Gift), score pill on #FCE0CC, gradient ca
 Tokens are at the top of `static/css/game.css` and `static/admin/admin.css`; logo `static/img/logo-mark.png`.
 
 ## Discount API (from Zabanyad backend)
-POST `DISCOUNT_API_URL` (`.../api/v1/discount/generateDiscountForUser`; the doc had a typo `comapi`, confirm),
+POST `DISCOUNT_API_URL` (host confirmed api.zabanyad.com; path `/api/v1/discount/generateDiscountForUser` assumed from the doc's `comapi` typo),
 headers `Content-Type: application/json`, `X-Client-Secret`. Body: mobile, email "", type percentage|amount,
 amount, max_amount, usage_count, start_date/end_date `YYYY-MM-DD HH:mm:ss` (Tehran). 201 → `{promotion_code}`;
 401 bad secret, 404 user not found (→ "sign up first", play not counted, prize stock released), 500.
-Amount unit (toman vs rial) not confirmed yet; panel labels say toman.
+Amounts are RIALS (confirmed); the panel shows the toman value under each amount. Prize labels shown to players may say toman.
+
+## Production
+New ArvanCloud server (Ubuntu 24.04, min 1 vCPU / 1 GB / 20 GB), `games.zabanyad.com` behind Arvan CDN (origin HTTP:80).
+Iranian servers may not reach PyPI/Docker Hub: `deploy/install.sh` installs from `deploy/wheels` (cp312 manylinux;
+refresh with `pip download ... --python-version 3.12 --only-binary=:all:` when requirements change) into
+/opt/zabanyad-games (.venv, data/, backups/, .env read by the app itself, not systemd). Release = bump `app/VERSION`,
+commit, `bash deploy/make-package.sh` → `dist/zabanyad-games-<N>.zip` (single top folder `zabanyad-games/`), send it;
+steps for the owner in `docs/deploy-fa.md`. Secrets only via `deploy/set-credentials.sh` on the server.
 
 ## Rules
 - The server decides every result; the page only animates it. Never send prize odds/answers that let a client choose.
