@@ -4,7 +4,7 @@
   const root = document.getElementById("root");
   const KIND = { wheel: "گردونه شانس", scratch: "کارت خراشی", quiz: "چالش کلمه" };
   const ICON = { wheel: "🎡", scratch: "🎟️", quiz: "🔤" };
-  const PRIZE_KIND = { percentage: "درصدی", amount: "مبلغی (تومان)", none: "بدون جایزه" };
+  const PRIZE_KIND = { percentage: "درصدی", amount: "مبلغی (ریال)", none: "بدون جایزه" };
   const STATUS = {
     won: ["برنده", "ok"], lost: ["بدون جایزه", "off"], need_signup: ["ثبت‌نام نکرده", "warn"],
     error: ["خطا", "bad"], pending: ["در حال بازی", "off"],
@@ -223,6 +223,18 @@
     const prizeRows = el("tbody");
     const prizes = game.prizes.map((p) => ({ ...p }));
     const chanceCells = [];
+    // amounts are rials (as the Zabanyad API expects); show the toman value under the box to avoid a zero too many
+    function rialField(p, key, isRial) {
+      const input = el("input", { type: "number", min: 0, value: p[key], title: isRial ? "ریال" : "درصد" });
+      const hint = el("div", { class: "small muted" });
+      const upd = () => {
+        const v = Number(input.value) || 0;
+        hint.textContent = !isRial ? "درصد" : v ? `${money(Math.round(v / 10))} تومان` : (key === "max_amount" ? "بدون سقف" : "");
+      };
+      input.addEventListener("input", () => { p[key] = input.value === "" ? 0 : Number(input.value); upd(); });
+      upd();
+      return el("div", {}, input, hint);
+    }
     function renderPrizes() {
       chanceCells.length = 0;
       const total = prizes.filter((p) => p.active).reduce((s, p) => s + (Number(p.weight) || 0), 0);
@@ -240,8 +252,8 @@
         return el("tr", {},
           el("td", {}, bind("label", el("input", { type: "text", class: "w-label", value: p.label }))),
           el("td", {}, kindSel),
-          el("td", {}, none ? "—" : bind("amount", el("input", { type: "number", min: 0, value: p.amount, title: p.kind === "percentage" ? "درصد" : "تومان" }), n)),
-          el("td", {}, none ? "—" : bind("max_amount", el("input", { type: "number", min: 0, value: p.max_amount, title: "۰ = بدون سقف" }), n)),
+          el("td", {}, none ? "—" : rialField(p, "amount", p.kind === "amount")),
+          el("td", {}, none ? "—" : rialField(p, "max_amount", true)),
           el("td", {}, none ? "—" : bind("usage_count", el("input", { type: "number", min: 1, value: p.usage_count, style: "width:70px" }), n)),
           isQuiz
             ? el("td", {}, bind("min_score", el("input", { type: "number", min: 0, value: p.min_score, style: "width:70px" }), n))
@@ -264,7 +276,7 @@
     }
     renderPrizes();
 
-    const prizeHead = ["متن جایزه", "نوع", "مقدار", "سقف تخفیف (تومان)", "دفعات استفاده",
+    const prizeHead = ["متن جایزه", "نوع", "مقدار", "سقف تخفیف (ریال)", "دفعات استفاده",
       isQuiz ? "حداقل جواب درست" : "وزن شانس", isQuiz ? "" : "احتمال", "موجودی", "داده‌شده", isQuiz ? "" : "رنگ", "فعال", ""]
       .filter((h, i) => !(isQuiz && (i === 6 || i === 9)));
 
@@ -312,8 +324,8 @@
             renderPrizes();
           } }, "+ جایزه")),
         el("p", { class: "muted small" }, isQuiz
-          ? "بازیکن بهترین جایزه‌ای را می‌گیرد که «حداقل جواب درست» آن را آورده باشد. یک ردیف «بدون جایزه» با حداقل ۰ بگذارید."
-          : "شانس هر جایزه = وزن آن ÷ جمع وزن‌ها. وقتی موجودی جایزه‌ای تمام شود، دیگر نمی‌افتد. سقف تخفیف ۰ یعنی بدون سقف."),
+          ? "بازیکن بهترین جایزه‌ای را می‌گیرد که «حداقل جواب درست» آن را آورده باشد. یک ردیف «بدون جایزه» با حداقل ۰ بگذارید. مبلغ‌ها به ریال است."
+          : "شانس هر جایزه = وزن آن ÷ جمع وزن‌ها. وقتی موجودی جایزه‌ای تمام شود، دیگر نمی‌افتد. مبلغ‌ها به ریال است؛ سقف تخفیف ۰ یعنی بدون سقف."),
         el("div", { class: "table-wrap" }, el("table", {}, el("thead", {}, el("tr", {}, prizeHead.map((h) => el("th", {}, h)))), prizeRows))),
       questionsBox,
       el("div", { class: "sticky-save row" }, save, msg,

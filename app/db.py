@@ -30,8 +30,8 @@ CREATE TABLE IF NOT EXISTS prizes (
     game_id INTEGER NOT NULL REFERENCES games(id),
     label TEXT NOT NULL,
     kind TEXT NOT NULL DEFAULT 'percentage',   -- percentage | amount | none
-    amount INTEGER NOT NULL DEFAULT 0,
-    max_amount INTEGER NOT NULL DEFAULT 0,
+    amount INTEGER NOT NULL DEFAULT 0,          -- percent, or rials for kind=amount
+    max_amount INTEGER NOT NULL DEFAULT 0,      -- rials, 0 = no cap
     usage_count INTEGER NOT NULL DEFAULT 1,
     weight INTEGER NOT NULL DEFAULT 1,
     stock INTEGER,                              -- NULL = unlimited
@@ -142,14 +142,14 @@ SEED_GAMES = [
         "subtitle": "گردونه رو بچرخون و کد تخفیف ببر!",
         "rules": "هر شماره موبایل یک بار می‌تونه بچرخونه. کد تخفیف روی همون شماره در زبانیاد فعال می‌شه.",
         "prizes": [
-            ("۱۰٪ تخفیف", "percentage", 10, 200000, 30),
+            ("۱۰٪ تخفیف", "percentage", 10, 2000000, 30),
             ("پوچ", "none", 0, 0, 20),
-            ("۱۵٪ تخفیف", "percentage", 15, 300000, 20),
-            ("۵۰ هزار تومان", "amount", 50000, 50000, 10),
-            ("۲۰٪ تخفیف", "percentage", 20, 400000, 10),
+            ("۱۵٪ تخفیف", "percentage", 15, 3000000, 20),
+            ("۵۰ هزار تومان", "amount", 500000, 500000, 10),
+            ("۲۰٪ تخفیف", "percentage", 20, 4000000, 10),
             ("یه بار دیگه!", "none", 0, 0, 10),
-            ("۳۰٪ تخفیف", "percentage", 30, 600000, 4),
-            ("۵٪ تخفیف", "percentage", 5, 100000, 30),
+            ("۳۰٪ تخفیف", "percentage", 30, 6000000, 4),
+            ("۵٪ تخفیف", "percentage", 5, 1000000, 30),
         ],
     },
     {
@@ -159,9 +159,9 @@ SEED_GAMES = [
         "subtitle": "روی کارت بکش و جایزه‌ت رو ببین!",
         "rules": "هر شماره موبایل یک بار می‌تونه کارت رو بخراشه.",
         "prizes": [
-            ("۱۰٪ تخفیف", "percentage", 10, 200000, 40),
-            ("۱۵٪ تخفیف", "percentage", 15, 300000, 25),
-            ("۲۵٪ تخفیف", "percentage", 25, 500000, 5),
+            ("۱۰٪ تخفیف", "percentage", 10, 2000000, 40),
+            ("۱۵٪ تخفیف", "percentage", 15, 3000000, 25),
+            ("۲۵٪ تخفیف", "percentage", 25, 5000000, 5),
             ("این بار نشد!", "none", 0, 0, 30),
         ],
     },
@@ -174,9 +174,9 @@ SEED_GAMES = [
         "settings": {"question_count": 5, "time_limit": 60},
         "prizes": [
             ("تلاش خوبی بود!", "none", 0, 0, 1, 0),
-            ("۱۰٪ تخفیف", "percentage", 10, 200000, 1, 3),
-            ("۱۵٪ تخفیف", "percentage", 15, 300000, 1, 4),
-            ("۲۵٪ تخفیف", "percentage", 25, 500000, 1, 5),
+            ("۱۰٪ تخفیف", "percentage", 10, 2000000, 1, 3),
+            ("۱۵٪ تخفیف", "percentage", 15, 3000000, 1, 4),
+            ("۲۵٪ تخفیف", "percentage", 25, 5000000, 1, 5),
         ],
         "questions": [
             ("apple", "سیب", ["پرتقال", "موز", "انگور"]),

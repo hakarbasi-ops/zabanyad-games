@@ -1,15 +1,20 @@
-# Without Docker: app in /opt/zabanyad-games with a venv in /opt/zabanyad-games/.venv
 [Unit]
 Description=Zabanyad discount games
 After=network.target
 
 [Service]
+User=zgames
+Group=zgames
 WorkingDirectory=/opt/zabanyad-games
-EnvironmentFile=/opt/zabanyad-games/.env
 Environment=DATA_DIR=/opt/zabanyad-games/data
-ExecStart=/opt/zabanyad-games/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
+# one worker: the app keeps a small in-process lock around prize draws
+ExecStart=/opt/zabanyad-games/.venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000 --workers 1 --no-server-header
 Restart=always
-User=www-data
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
 
 [Install]
 WantedBy=multi-user.target
