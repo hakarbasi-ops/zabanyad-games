@@ -3,15 +3,23 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#6c4cf1">
+  <meta name="theme-color" content="#ffffff">
   <title>بازی‌های زبانیاد</title>
+  <link rel="icon" href="/static/img/logo-mark.png">
   <link rel="stylesheet" href="/static/css/game.css">
 </head>
 <body>
+  <header class="appbar">
+    <div class="appbar-inner">
+      <a class="brand" href="/"><img src="/static/img/logo-mark.png" alt="">زبانیاد</a>
+      <h1>بازی و جایزه</h1>
+    </div>
+  </header>
   <main class="page">
-    <a class="brand" href="/"><span class="brand-dot">ز</span>زبانیاد</a>
-    <h1>بازی کن، تخفیف ببر!</h1>
-    <p class="subtitle">یکی از بازی‌ها رو انتخاب کن و کد تخفیف خریدت از زبانیاد رو بگیر.</p>
+    <div class="hero">
+      <h2>بازی کن، تخفیف ببر!</h2>
+      <p>یکی از بازی‌ها رو انتخاب کن و کد تخفیف خریدت از زبانیاد رو بگیر.</p>
+    </div>
     <div class="game-list" id="list"><div class="closed">…</div></div>
   </main>
   <script src="/static/js/common.js"></script>
@@ -23,9 +31,9 @@
       try {
         const { games } = await api("/api/games");
         list.replaceChildren(...(games.length ? games.map((g) =>
-          el("a", { class: "game-link", href: `/g/${encodeURIComponent(g.slug)}` },
-            el("span", { class: "icon" }, icons[g.kind] || "🎁"),
-            el("div", {}, el("b", {}, g.title), el("span", {}, g.subtitle)))) :
+          el("a", { class: `game-link kind-${g.kind}`, href: `/g/${encodeURIComponent(g.slug)}` },
+            el("b", {}, g.title), el("span", {}, g.subtitle),
+            el("i", { class: "icon", "aria-hidden": "true" }, icons[g.kind] || "🎁"))) :
           [el("div", { class: "card closed" }, "فعلاً بازی فعالی نداریم. به‌زودی برمی‌گردیم!")]));
       } catch (e) {
         list.replaceChildren(el("div", { class: "card closed" }, e.message));

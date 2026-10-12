@@ -131,7 +131,8 @@ def rows(rs) -> list[dict]:
 
 # ---------------------------------------------------------------- seed data
 
-DEFAULT_COLORS = ["#6C4CF1", "#FFB020", "#19B48A", "#FF5C7A", "#2F9BFF", "#FF8A3D", "#9B5CF6", "#12C2C2"]
+# Zabanyad design-system palette: brand orange, lighter, info, subtle
+DEFAULT_COLORS = ["#F26600", "#FCE0CC", "#33357D", "#F7A366"]
 
 SEED_GAMES = [
     {

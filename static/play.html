@@ -3,16 +3,27 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#6c4cf1">
+  <meta name="theme-color" content="#ffffff">
   <title>بازی زبانیاد</title>
+  <link rel="icon" href="/static/img/logo-mark.png">
   <link rel="preload" href="/static/fonts/Vazirmatn.woff2" as="font" type="font/woff2" crossorigin>
   <link rel="stylesheet" href="/static/css/game.css">
 </head>
 <body>
+  <header class="appbar">
+    <div class="appbar-inner">
+      <a class="brand" href="/"><img src="/static/img/logo-mark.png" alt="">زبانیاد</a>
+      <a class="back" href="/" aria-label="همه‌ی بازی‌ها">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>
+      </a>
+    </div>
+  </header>
   <main class="page">
-    <a class="brand" href="/"><span class="brand-dot">ز</span>زبانیاد</a>
-    <h1 id="title">…</h1>
-    <p class="subtitle" id="subtitle"></p>
+    <div class="hero">
+      <p class="eyebrow" id="eyebrow"></p>
+      <h2 id="title">…</h2>
+      <p id="subtitle"></p>
+    </div>
     <section class="card" id="app"></section>
     <p class="rules" id="rules"></p>
   </main>

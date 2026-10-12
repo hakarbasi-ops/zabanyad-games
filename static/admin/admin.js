@@ -48,7 +48,7 @@
     const logout = el("a", { href: "#", onclick: async (e) => { e.preventDefault(); await api("/api/admin/logout", { method: "POST" }); loginView(); } }, "خروج");
     root.replaceChildren(el("div", { class: "layout" },
       el("nav", { class: "side" },
-        el("div", { class: "logo" }, "🎮 بازی‌های زبانیاد"),
+        el("div", { class: "logo" }, el("img", { src: "/static/img/logo-mark.png", alt: "" }), "بازی‌های زبانیاد"),
         link("#/", "داشبورد"), link("#/games", "بازی‌ها و جایزه‌ها"), link("#/plays", "بازی‌کنندگان و کدها"),
         link("#/settings", "اتصال به زبانیاد"), el("div", { class: "spacer" }), logout),
       el("main", { class: "main" }, modeNote(), ...content)));
@@ -104,8 +104,8 @@
         stat(t.need_signup, "تلاش بدون ثبت‌نام در زبانیاد")),
       el("div", { class: "card" },
         el("div", { class: "row between" }, el("h2", {}, "۱۴ روز اخیر"),
-          el("div", { class: "legend" }, el("span", {}, el("i", { style: "background:#c9bdfb" }), "بازی"),
-            el("span", {}, el("i", { style: "background:#6c4cf1" }), "کد تخفیف"))),
+          el("div", { class: "legend" }, el("span", {}, el("i", { style: "background:#fce0cc" }), "بازی"),
+            el("span", {}, el("i", { style: "background:#f26600" }), "کد تخفیف"))),
         chart(stats.days)),
       el("div", { class: "card" }, el("h2", {}, "بازی‌ها"),
         el("div", { class: "grid" }, games.map((g) => el("a", { href: `#/games/${g.id}`, class: "stat", style: "text-decoration:none;color:inherit" },
@@ -141,13 +141,13 @@
     days.forEach((d, i) => {
       const x = pad / 2 + i * bw;
       const h1 = ((H - 40) * d.plays) / max, h2 = ((H - 40) * d.codes) / max;
-      const bar = add("rect", { x: x + bw * 0.15, y: H - 22 - h1, width: bw * 0.7, height: h1, rx: 4, fill: "#c9bdfb" });
-      add("rect", { x: x + bw * 0.15, y: H - 22 - h2, width: bw * 0.7, height: h2, rx: 4, fill: "#6c4cf1" });
+      const bar = add("rect", { x: x + bw * 0.15, y: H - 22 - h1, width: bw * 0.7, height: h1, rx: 4, fill: "#fce0cc" });
+      add("rect", { x: x + bw * 0.15, y: H - 22 - h2, width: bw * 0.7, height: h2, rx: 4, fill: "#f26600" });
       const title = document.createElementNS(ns, "title");
       title.textContent = `${jalaliDate(d.day + " 12:00")}: ${fa(d.plays)} بازی، ${fa(d.codes)} کد`;
       bar.append(title);
       if (i % 2 === days.length % 2) {
-        add("text", { x: x + bw / 2, y: H - 6, "text-anchor": "middle", "font-size": 11, fill: "#6b6788" },
+        add("text", { x: x + bw / 2, y: H - 6, "text-anchor": "middle", "font-size": 11, fill: "#6b7588" },
           jalaliDate(d.day + " 12:00").split(" ").slice(0, 2).join(" "));
       }
     });
@@ -214,7 +214,7 @@
     };
     f.enabled = el("input", { type: "checkbox", checked: !!game.enabled });
     f.rules = el("textarea", {}, game.rules || "");
-    f.color = el("input", { type: "color", value: game.settings.color || "#6c4cf1" });
+    f.color = el("input", { type: "color", value: game.settings.color || "#f26600" });
     if (isQuiz) {
       f.question_count = el("input", { type: "number", min: 1, max: 20, value: game.settings.question_count || 5 });
       f.time_limit = el("input", { type: "number", min: 10, max: 600, value: game.settings.time_limit || 60 });
@@ -250,7 +250,7 @@
           el("td", {}, none ? "—" : bind("stock", el("input", { type: "number", min: 0, value: p.stock ?? "", placeholder: "نامحدود", style: "width:90px" }),
             (v) => (v === "" ? null : Number(v)))),
           el("td", { class: "small muted" }, none ? "—" : fa(p.given || 0)),
-          isQuiz ? "" : el("td", {}, bind("color", el("input", { type: "color", value: p.color || "#6c4cf1" }))),
+          isQuiz ? "" : el("td", {}, bind("color", el("input", { type: "color", value: p.color || "#f26600" }))),
           el("td", {}, bind("active", el("input", { type: "checkbox", checked: !!p.active }))),
           el("td", {}, el("button", { type: "button", class: "btn ghost", title: "حذف", onclick: () => { prizes.splice(i, 1); renderPrizes(); } }, "✕")));
       }));

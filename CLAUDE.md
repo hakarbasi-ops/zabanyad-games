@@ -11,6 +11,15 @@ when they win. Owner is non-technical: reply in Persian, plain words. All UI tex
 - `static/` plain JS, no build: `play.html`+`js/play.js` (all three games), `index.html`, `admin/` panel.
 - Tests: `pytest` (mock discount mode, temp DATA_DIR).
 
+## Design
+Follows the Zabanyad app's Figma design system (file WDJnVGefUtwnVJ91J4AgAm, page "Design System" 5633:11079,
+Farsi app screens 14240:65435): brand #F26600 (darker #572401, lighter #FCE0CC, subtle #F7A366), info #33357D,
+success #06C270, warning #FFCC00, error #FF3B3B, darks #212228/#3A4046/#6B7588, light bg #F9FAFF; font Vazir
+(we ship Vazirmatn). Patterns copied from the app: white app bar, orange 8px-radius buttons with a darker 4px bottom
+edge, outlined answer buttons that turn dark #3A4046 when picked, orange progress bar + mm:ss timer (placement
+test), result as a bottom sheet (Daily Gift), score pill on #FCE0CC, gradient cards (Levels row).
+Tokens are at the top of `static/css/game.css` and `static/admin/admin.css`; logo `static/img/logo-mark.png`.
+
 ## Discount API (from Zabanyad backend)
 POST `DISCOUNT_API_URL` (`.../api/v1/discount/generateDiscountForUser`; the doc had a typo `comapi`, confirm),
 headers `Content-Type: application/json`, `X-Client-Secret`. Body: mobile, email "", type percentage|amount,
