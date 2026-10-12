@@ -229,7 +229,7 @@
       const hint = el("div", { class: "small muted" });
       const upd = () => {
         const v = Number(input.value) || 0;
-        hint.textContent = !isRial ? "درصد" : v ? `${money(Math.round(v / 10))} تومان` : (key === "max_amount" ? "بدون سقف" : "");
+        hint.textContent = !isRial ? "درصد" : v ? `${money(Math.round(v / 10))} تومان` : (key === "max_amount" ? "لازم است" : "");
       };
       input.addEventListener("input", () => { p[key] = input.value === "" ? 0 : Number(input.value); upd(); });
       upd();
@@ -325,7 +325,7 @@
           } }, "+ جایزه")),
         el("p", { class: "muted small" }, isQuiz
           ? "بازیکن بهترین جایزه‌ای را می‌گیرد که «حداقل جواب درست» آن را آورده باشد. یک ردیف «بدون جایزه» با حداقل ۰ بگذارید. مبلغ‌ها به ریال است."
-          : "شانس هر جایزه = وزن آن ÷ جمع وزن‌ها. وقتی موجودی جایزه‌ای تمام شود، دیگر نمی‌افتد. مبلغ‌ها به ریال است؛ سقف تخفیف ۰ یعنی بدون سقف."),
+          : "شانس هر جایزه = وزن آن ÷ جمع وزن‌ها. وقتی موجودی جایزه‌ای تمام شود، دیگر نمی‌افتد. مبلغ‌ها و سقف تخفیف به ریال است."),
         el("div", { class: "table-wrap" }, el("table", {}, el("thead", {}, el("tr", {}, prizeHead.map((h) => el("th", {}, h)))), prizeRows))),
       questionsBox,
       el("div", { class: "sticky-save row" }, save, msg,
@@ -450,12 +450,14 @@
     const mobile = el("input", { type: "tel", class: "ltr", placeholder: "09123456789" });
     const amount = el("input", { type: "number", value: 5, min: 1, max: 100 });
     const days = el("input", { type: "number", value: 1, min: 1 });
+    const maxAmount = el("input", { type: "number", value: 1000000, min: 1 });
     const out = el("div");
     const btn = el("button", { class: "btn" }, "ساخت یک کد آزمایشی");
     const form = el("form", {},
       el("div", { class: "form-grid" },
         el("label", { class: "f" }, el("span", {}, "موبایل (باید در زبانیاد ثبت‌نام کرده باشد)"), mobile),
         el("label", { class: "f" }, el("span", {}, "درصد تخفیف"), amount),
+        el("label", { class: "f" }, el("span", {}, "سقف تخفیف (ریال)"), maxAmount),
         el("label", { class: "f" }, el("span", {}, "اعتبار (روز)"), days)),
       btn, out);
     form.addEventListener("submit", async (e) => {
@@ -463,9 +465,10 @@
       btn.disabled = true;
       out.replaceChildren();
       try {
-        const r = await api("/api/admin/test-code", { method: "POST", body: { mobile: mobile.value, amount: Number(amount.value), days: Number(days.value) } });
+        const r = await api("/api/admin/test-code", { method: "POST", body: { mobile: mobile.value, amount: Number(amount.value), max_amount: Number(maxAmount.value) || 1, days: Number(days.value) } });
+        loadLog();
         out.replaceChildren(r.ok
-          ? el("div", { class: "msg ok" }, `کد ساخته شد: `, el("b", { class: "mono" }, r.code), ` (تا ${jalaliDate(r.valid_until)})`, r.mode === "mock" ? " — ساختگی، حالت آزمایشی" : "")
+          ? el("div", { class: "msg ok" }, `کد ساخته شد: `, el("b", { class: "mono" }, r.code), ` (از ${jalaliDate(r.valid_from, true)} تا ${jalaliDate(r.valid_until, true)})`, r.mode === "mock" ? " — ساختگی، حالت آزمایشی" : "")
           : el("div", { class: "msg bad" }, r.message, r.detail ? el("div", { class: "small ltr" }, r.detail) : ""));
       } catch (err) {
         out.replaceChildren(el("div", { class: "msg bad" }, err.message));
@@ -489,6 +492,34 @@
         el("p", { class: "muted small" }, "این تنظیمات فقط روی سرور (فایل ‎.env‎) عوض می‌شوند؛ کلید هیچ‌وقت در پنل نشان داده نمی‌شود.")),
       el("div", { class: "card" }, el("h2", {}, "آزمایش ساخت کد"),
         el("p", { class: "note info" }, "در حالت واقعی این دکمه یک کد تخفیف واقعی روی همان شماره در زبانیاد می‌سازد. با شماره‌ی خودتان و درصد کم امتحان کنید."),
-        form));
+        form),
+      el("div", { class: "card" },
+        el("div", { class: "row between" }, el("h2", {}, "آخرین درخواست‌ها به زبانیاد"),
+          el("button", { type: "button", class: "btn light", onclick: () => loadLog() }, "به‌روز کردن")),
+        el("p", { class: "muted small" }, "دقیقاً همان چیزی که برای ساخت کد فرستاده شد و جوابی که زبانیاد داد (کلید نشان داده نمی‌شود). برای بررسی مشکل‌ها می‌توانید همین را به تیم بک‌اند نشان دهید."),
+        logBox));
+    loadLog();
+  }
+
+  const logBox = el("div", { class: "table-wrap" });
+
+  async function loadLog() {
+    let rows;
+    try { rows = await api("/api/admin/api-log"); } catch (e) { logBox.replaceChildren(el("div", { class: "msg bad" }, e.message)); return; }
+    if (!rows.length) { logBox.replaceChildren(el("p", { class: "muted" }, "هنوز درخواستی فرستاده نشده.")); return; }
+    const status = (r) => r.mode !== "live" ? el("span", { class: "badge warn" }, "آزمایشی")
+      : r.status == null ? el("span", { class: "badge bad" }, "بدون اتصال")
+      : el("span", { class: `badge ${r.status < 300 ? "ok" : "bad"}` }, String(r.status));
+    logBox.replaceChildren(el("table", {},
+      el("thead", {}, el("tr", {}, ["زمان", "وضعیت", "فرستاده‌شده", "جواب زبانیاد", "زمان پاسخ"].map((h) => el("th", {}, h)))),
+      el("tbody", {}, rows.map((r) => el("tr", {},
+        el("td", {}, jalaliDate(r.created_at, true)), el("td", {}, status(r)),
+        el("td", { class: "small", style: "white-space:pre-wrap;min-width:260px;direction:ltr;text-align:left;unicode-bidi:isolate" }, prettyJson(r.request)),
+        el("td", { class: "small", style: "white-space:pre-wrap;min-width:160px;direction:ltr;text-align:left;unicode-bidi:isolate" }, r.response),
+        el("td", { class: "small muted" }, r.ms != null ? `${fa(r.ms)} ms` : ""))))));
+  }
+
+  function prettyJson(text) {
+    try { return JSON.stringify(JSON.parse(text), null, 1); } catch (e) { return text; }
   }
 })();

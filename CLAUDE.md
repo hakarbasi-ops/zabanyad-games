@@ -25,7 +25,11 @@ POST `DISCOUNT_API_URL` (host confirmed api.zabanyad.com; path `/api/v1/discount
 headers `Content-Type: application/json`, `X-Client-Secret`. Body: mobile, email "", type percentage|amount,
 amount, max_amount, usage_count, start_date/end_date `YYYY-MM-DD HH:mm:ss` (Tehran). 201 → `{promotion_code}`;
 401 bad secret, 404 user not found (→ "sign up first", play not counted, prize stock released), 500.
-Amounts are RIALS (confirmed); the panel shows the toman value under each amount. Prize labels shown to players may say toman.
+Amounts are RIALS (confirmed); the panel shows the toman value under each amount. Server check (v3): URL correct
+(POST without secret → 401), mode live, secret set; yet the first real test code was "not valid" in the app. v4: start_date =
+yesterday 00:00 Tehran (in case Zabanyad reads dates as UTC), percentage prizes need max_amount > 0 (0 may mean a 0-rial
+cap; test form used to send 0), and every API call is logged in `api_log` (body + status + response, never the secret),
+shown on the panel's «اتصال به زبانیاد» page. Ask the backend team about timezone / validity if it still fails. Prize labels shown to players may say toman.
 
 ## SMS verification (`app/otp.py`)
 Owner wants each player's mobile confirmed by SMS before playing. `/api/otp/send` → 5-digit code (2 min, resend after

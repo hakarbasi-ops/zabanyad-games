@@ -59,9 +59,11 @@ def api_datetime(dt: datetime) -> str:
 
 
 def code_validity(days: int) -> tuple[str, str]:
-    """(start, end) for the discount API: from now until the end of the day `days` days from now."""
-    start = local_now()
-    end = (start + timedelta(days=max(days, 1) - 1)).replace(hour=23, minute=59, second=59, microsecond=0)
+    """(start, end) for the discount API. Start is yesterday 00:00 Tehran, so the code is valid at once even if
+    Zabanyad reads the dates as UTC (3.5 h behind); end is 23:59:59 of the `days`-th day from today."""
+    now = local_now()
+    start = (now - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
+    end = (now + timedelta(days=max(days, 1) - 1)).replace(hour=23, minute=59, second=59, microsecond=0)
     return api_datetime(start), api_datetime(end)
 
 

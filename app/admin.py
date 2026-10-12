@@ -164,6 +164,8 @@ def _check_prizes(kind: str, prizes: list[PrizeIn]) -> None:
             raise HTTPException(400, f"«{p.label}»: درصد باید بین ۱ تا ۱۰۰ باشد.")
         if p.kind == "amount" and p.amount <= 0:
             raise HTTPException(400, f"«{p.label}»: مبلغ تخفیف را وارد کنید.")
+        if p.kind == "percentage" and p.max_amount <= 0 and p.active:
+            raise HTTPException(400, f"«{p.label}»: سقف تخفیف (ریال) را وارد کنید.")
 
 
 @router.get("/games", dependencies=[Depends(require_admin)])
@@ -381,7 +383,7 @@ class TestCodeIn(BaseModel):
     mobile: str
     type: Literal["percentage", "amount"] = "percentage"
     amount: int = Field(5, ge=1)
-    max_amount: int = Field(0, ge=0)
+    max_amount: int = Field(1_000_000, ge=1)
     days: int = Field(1, ge=1, le=365)
 
 
@@ -405,4 +407,10 @@ def test_code(body: TestCodeIn):
             "bad_response": "جواب سرور زبانیاد کد تخفیف نداشت.",
         }
         return {"ok": False, "kind": exc.kind, "message": messages.get(exc.kind, exc.kind), "detail": exc.detail}
-    return {"ok": True, "code": code, "mode": discount.mode(), "valid_until": end}
+    return {"ok": True, "code": code, "mode": discount.mode(), "valid_from": start, "valid_until": end}
+
+
+@router.get("/api-log", dependencies=[Depends(require_admin)])
+def api_log(limit: int = 30):
+    with db.session() as conn:
+        return db.rows(conn.execute("SELECT * FROM api_log ORDER BY id DESC LIMIT ?", (max(1, min(limit, 200)),)))

@@ -152,3 +152,18 @@ def test_live_api_call(monkeypatch):
         with pytest.raises(discount.DiscountError) as exc:
             discount.generate(req)
         assert exc.value.kind == kind
+
+
+def test_api_log_and_validity(admin):
+    r = admin.post("/api/admin/test-code", json={"mobile": "09120000099", "amount": 5}).json()
+    assert r["ok"] and r["valid_from"].endswith("00:00:00")
+    rows = admin.get("/api/admin/api-log").json()
+    assert rows and "09120000099" in rows[0]["request"] and '"max_amount": 1000000' in rows[0]["request"]
+    assert "Secret" not in rows[0]["request"]
+
+
+def test_percentage_prize_needs_cap(admin):
+    game = next(g for g in admin.get("/api/admin/games").json() if g["slug"] == "wheel")
+    full = admin.get(f"/api/admin/games/{game['id']}").json()
+    full["prizes"][0]["max_amount"] = 0
+    assert admin.put(f"/api/admin/games/{game['id']}", json=full).status_code == 400

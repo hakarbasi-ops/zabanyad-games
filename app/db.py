@@ -71,6 +71,15 @@ CREATE TABLE IF NOT EXISTS plays (
 CREATE INDEX IF NOT EXISTS plays_game_mobile ON plays(game_id, mobile, created_at);
 CREATE INDEX IF NOT EXISTS plays_game_created ON plays(game_id, created_at);
 CREATE UNIQUE INDEX IF NOT EXISTS plays_token ON plays(token) WHERE token IS NOT NULL;
+CREATE TABLE IF NOT EXISTS api_log (
+    id INTEGER PRIMARY KEY,
+    created_at TEXT NOT NULL,
+    mode TEXT NOT NULL,
+    request TEXT NOT NULL,          -- JSON body sent (never the secret)
+    status INTEGER,                 -- HTTP status, NULL when the server was unreachable
+    response TEXT NOT NULL DEFAULT '',
+    ms INTEGER
+);
 CREATE TABLE IF NOT EXISTS otps (
     id INTEGER PRIMARY KEY,
     mobile TEXT NOT NULL,
