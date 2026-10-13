@@ -50,7 +50,7 @@
       el("nav", { class: "side" },
         el("div", { class: "logo" }, el("img", { src: "/static/img/logo-mark.png", alt: "" }), "بازی‌های زبانیاد"),
         link("#/", "داشبورد"), link("#/games", "بازی‌ها و جایزه‌ها"), link("#/plays", "بازی‌کنندگان و کدها"),
-        link("#/settings", "اتصال به زبانیاد"), el("div", { class: "spacer" }), logout),
+        link("#/chances", "شانس‌ها و دعوت"), link("#/settings", "اتصال به زبانیاد"), el("div", { class: "spacer" }), logout),
       el("main", { class: "main" }, modeNote(), ...content)));
   }
 
@@ -67,6 +67,7 @@
     if (hash.startsWith("#/games")) return gamesView();
     if (hash.startsWith("#/plays")) return playsView();
     if (hash.startsWith("#/settings")) return settingsView();
+    if (hash.startsWith("#/chances")) return chancesView();
     return dashboardView();
   }
 
@@ -311,8 +312,7 @@
         el("label", { class: "f", style: "margin-top:14px" }, el("span", {}, "قوانین (زیر بازی نشان داده می‌شود)"), f.rules)),
       el("div", { class: "card" }, el("h2", {}, "محدودیت‌ها و کد تخفیف"),
         el("div", { class: "form-grid" },
-          el("label", { class: "f" }, el("span", {}, "هر شماره چند بار بازی کند"), num("plays_per_mobile", { min: 1 })),
-          el("label", { class: "f" }, el("span", {}, "در هر چند روز (۰ = کل دوره)"), num("period_days")),
+          num("plays_per_mobile", { min: 1, type: "hidden" }), num("period_days", { type: "hidden" }),
           el("label", { class: "f" }, el("span", {}, "اعتبار کد تخفیف (روز)"), num("code_valid_days", { min: 1 })),
           el("label", { class: "f" }, el("span", {}, "سقف کد در روز (۰ = بدون سقف)"), num("daily_code_limit")),
           isQuiz ? el("label", { class: "f" }, el("span", {}, "تعداد کلمه در هر بازی"), f.question_count) : "",
@@ -517,6 +517,78 @@
         el("td", { class: "small", style: "white-space:pre-wrap;min-width:260px;direction:ltr;text-align:left;unicode-bidi:isolate" }, prettyJson(r.request)),
         el("td", { class: "small", style: "white-space:pre-wrap;min-width:160px;direction:ltr;text-align:left;unicode-bidi:isolate" }, r.response),
         el("td", { class: "small muted" }, r.ms != null ? `${fa(r.ms)} ms` : ""))))));
+  }
+
+  // ------------------------------------------------------------ chances and invites
+
+  async function chancesView() {
+    loading("#/chances");
+    let cfg, refs;
+    try { [cfg, refs] = await Promise.all([api("/api/admin/chance-settings"), api("/api/admin/referrals")]); }
+    catch (e) { return fail("#/chances", e); }
+    const fields = [
+      ["start_chances", "شانس اول هر کاربر جدید"],
+      ["daily_chance", "شانس روزانه (هر روز که سر بزند)"],
+      ["referral_reward", "هدیه‌ی دعوت‌کننده برای هر دعوت"],
+      ["invitee_bonus", "شانس اضافه‌ی دوستِ دعوت‌شده"],
+      ["referral_daily_cap", "حداکثر دعوت موفق هر نفر در روز"],
+    ];
+    const inputs = {};
+    const enabled = el("input", { type: "checkbox", checked: !!cfg.referral_enabled });
+    const msg = el("div");
+    const form = el("form", { class: "card" },
+      el("div", { class: "row between" }, el("h2", {}, "قوانین شانس"),
+        el("label", { class: "check" }, enabled, "دعوت دوستان فعال باشد")),
+      me.sms_mode === "mock" ? el("p", { class: "note" },
+        "پیامک هنوز آزمایشی است؛ تا وصل شدن پیامک واقعی، دعوت را خاموش نگه دارید (وگرنه با شماره‌های ساختگی می‌شود شانس جمع کرد).") : "",
+      el("div", { class: "form-grid" }, fields.map(([key, label]) =>
+        el("label", { class: "f" }, el("span", {}, label), (inputs[key] = el("input", { type: "number", min: 0, value: cfg[key] }))))),
+      el("p", { class: "muted small" }, `کاربر جدید ${fa(cfg.start_chances)} شانس می‌گیرد؛ اگر با لینک دعوت بیاید ${fa(cfg.start_chances + cfg.invitee_bonus)} شانس. هر بازی یک شانس مصرف می‌کند.`),
+      el("button", { class: "btn" }, "ذخیره"), msg);
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const body = { referral_enabled: enabled.checked ? 1 : 0 };
+      for (const [key] of fields) body[key] = Number(inputs[key].value) || 0;
+      try {
+        await api("/api/admin/chance-settings", { method: "PUT", body });
+        msg.replaceChildren(el("span", { class: "msg ok" }, "ذخیره شد ✓"));
+        setTimeout(chancesView, 700);
+      } catch (err) { msg.replaceChildren(el("span", { class: "msg bad" }, err.message)); }
+    });
+
+    const gMobile = el("input", { type: "tel", class: "ltr", placeholder: "09123456789" });
+    const gCount = el("input", { type: "number", value: 3 });
+    const gMsg = el("div");
+    const grant = el("form", { class: "card" }, el("h2", {}, "دادن شانس به یک شماره"),
+      el("p", { class: "muted small" }, "برای پشتیبانی یا جایزه‌ی ویژه. عدد منفی شانس کم می‌کند."),
+      el("div", { class: "form-grid" }, el("label", { class: "f" }, el("span", {}, "موبایل"), gMobile),
+        el("label", { class: "f" }, el("span", {}, "تعداد شانس"), gCount)),
+      el("button", { class: "btn", style: "margin-top:12px" }, "ثبت"), gMsg);
+    grant.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      try {
+        const r = await api("/api/admin/grant-chances", { method: "POST", body: { mobile: gMobile.value, count: Number(gCount.value) } });
+        gMsg.replaceChildren(el("div", { class: "msg ok" }, `شانس‌های ${fa(r.mobile)} حالا ${fa(r.chances)} است.`));
+      } catch (err) { gMsg.replaceChildren(el("div", { class: "msg bad" }, err.message)); }
+    });
+
+    const stat = (n, label) => el("div", { class: "stat" }, el("b", {}, fa(n)), el("span", {}, label));
+    shell("#/chances",
+      el("h1", {}, "شانس‌ها و دعوت"),
+      el("div", { class: "grid", style: "margin-bottom:16px" },
+        stat(refs.totals.players, "بازیکن"), stat(refs.totals.referrals, "دعوت موفق"), stat(refs.totals.open_chances, "شانس استفاده‌نشده")),
+      form, grant,
+      el("div", { class: "card" }, el("h2", {}, "بیشترین دعوت‌ها"),
+        refs.top.length ? el("div", { class: "table-wrap" }, el("table", {},
+          el("thead", {}, el("tr", {}, ["موبایل", "دعوت موفق", "شانس فعلی", "کد دعوت"].map((h) => el("th", {}, h)))),
+          el("tbody", {}, refs.top.map((r) => el("tr", {}, el("td", { class: "ltr" }, fa(r.mobile)), el("td", {}, fa(r.invites)),
+            el("td", {}, fa(r.chances)), el("td", { class: "mono ltr" }, r.ref_code))))))
+          : el("p", { class: "muted" }, "هنوز دعوتی ثبت نشده.")),
+      refs.recent.length ? el("div", { class: "card" }, el("h2", {}, "آخرین دعوت‌ها"),
+        el("div", { class: "table-wrap" }, el("table", {},
+          el("thead", {}, el("tr", {}, ["زمان", "دعوت‌کننده", "دوست", "هدیه"].map((h) => el("th", {}, h)))),
+          el("tbody", {}, refs.recent.map((r) => el("tr", {}, el("td", {}, jalaliDate(r.created_at, true)),
+            el("td", { class: "ltr" }, fa(r.inviter)), el("td", { class: "ltr" }, fa(r.invitee)), el("td", {}, `${fa(r.reward)} شانس`))))))) : "");
   }
 
   function prettyJson(text) {

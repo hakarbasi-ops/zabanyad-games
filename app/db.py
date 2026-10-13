@@ -71,6 +71,28 @@ CREATE TABLE IF NOT EXISTS plays (
 CREATE INDEX IF NOT EXISTS plays_game_mobile ON plays(game_id, mobile, created_at);
 CREATE INDEX IF NOT EXISTS plays_game_created ON plays(game_id, created_at);
 CREATE UNIQUE INDEX IF NOT EXISTS plays_token ON plays(token) WHERE token IS NOT NULL;
+CREATE TABLE IF NOT EXISTS settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS players (
+    mobile TEXT PRIMARY KEY,
+    chances INTEGER NOT NULL DEFAULT 0,
+    ref_code TEXT NOT NULL UNIQUE,
+    referred_by TEXT,
+    invites INTEGER NOT NULL DEFAULT 0,
+    last_daily TEXT,                 -- Tehran date of the last daily chance
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS referrals (
+    id INTEGER PRIMARY KEY,
+    inviter TEXT NOT NULL,
+    invitee TEXT NOT NULL UNIQUE,
+    reward INTEGER NOT NULL,
+    created_at TEXT NOT NULL,
+    created_local TEXT NOT NULL      -- Tehran time, for the per-day cap
+);
+CREATE INDEX IF NOT EXISTS referrals_inviter ON referrals(inviter, created_local);
 CREATE TABLE IF NOT EXISTS api_log (
     id INTEGER PRIMARY KEY,
     created_at TEXT NOT NULL,
@@ -130,6 +152,7 @@ def init() -> None:
         conn.executescript(SCHEMA)
         if not conn.execute("SELECT 1 FROM games LIMIT 1").fetchone():
             seed(conn)
+        apply_prize_plan(conn)
 
 
 def row(r: sqlite3.Row | None) -> dict | None:
@@ -160,44 +183,22 @@ SEED_GAMES = [
         "kind": "wheel",
         "title": "گردونه شانس زبانیاد",
         "subtitle": "گردونه رو بچرخون و کد تخفیف ببر!",
-        "rules": "هر شماره موبایل یک بار می‌تونه بچرخونه. کد تخفیف روی همون شماره در زبانیاد فعال می‌شه.",
-        "prizes": [
-            ("۱۰٪ تخفیف", "percentage", 10, 2000000, 30),
-            ("پوچ", "none", 0, 0, 20),
-            ("۱۵٪ تخفیف", "percentage", 15, 3000000, 20),
-            ("۵۰ هزار تومان", "amount", 500000, 500000, 10),
-            ("۲۰٪ تخفیف", "percentage", 20, 4000000, 10),
-            ("یه بار دیگه!", "none", 0, 0, 10),
-            ("۳۰٪ تخفیف", "percentage", 30, 6000000, 4),
-            ("۵٪ تخفیف", "percentage", 5, 1000000, 30),
-        ],
+        "rules": "هر چرخش یک شانس مصرف می‌کند. همه برنده‌اند: از ۱۰٪ تا ۹۰٪ تخفیف! کد روی همان شماره در زبانیاد فعال می‌شود.",
     },
     {
         "slug": "scratch",
         "kind": "scratch",
         "title": "کارت خراشی زبانیاد",
         "subtitle": "روی کارت بکش و جایزه‌ت رو ببین!",
-        "rules": "هر شماره موبایل یک بار می‌تونه کارت رو بخراشه.",
-        "prizes": [
-            ("۱۰٪ تخفیف", "percentage", 10, 2000000, 40),
-            ("۱۵٪ تخفیف", "percentage", 15, 3000000, 25),
-            ("۲۵٪ تخفیف", "percentage", 25, 5000000, 5),
-            ("این بار نشد!", "none", 0, 0, 30),
-        ],
+        "rules": "هر کارت یک شانس مصرف می‌کند. همه برنده‌اند: از ۱۰٪ تا ۹۰٪ تخفیف!",
     },
     {
         "slug": "words",
         "kind": "quiz",
         "title": "چالش کلمه‌های زبانیاد",
         "subtitle": "معنی کلمه‌ها رو در ۶۰ ثانیه پیدا کن؛ هرچی بیشتر، تخفیف بیشتر!",
-        "rules": "۵ کلمه، ۶۰ ثانیه. با ۳ جواب درست ۱۰٪، با ۴ جواب ۱۵٪ و با ۵ جواب ۲۵٪ تخفیف می‌گیری.",
+        "rules": "۵ کلمه، ۶۰ ثانیه، یک شانس. ۰ تا ۱ جواب درست ۱۰٪، ۲ جواب ۲۰٪، ۳ جواب ۳۰٪، ۴ جواب ۴۰٪ و ۵ جواب ۵۰٪ تخفیف.",
         "settings": {"question_count": 5, "time_limit": 60},
-        "prizes": [
-            ("تلاش خوبی بود!", "none", 0, 0, 1, 0),
-            ("۱۰٪ تخفیف", "percentage", 10, 2000000, 1, 3),
-            ("۱۵٪ تخفیف", "percentage", 15, 3000000, 1, 4),
-            ("۲۵٪ تخفیف", "percentage", 25, 5000000, 1, 5),
-        ],
         "questions": [
             ("apple", "سیب", ["پرتقال", "موز", "انگور"]),
             ("library", "کتابخانه", ["کتاب‌فروشی", "دانشگاه", "مدرسه"]),
@@ -228,16 +229,56 @@ def seed(conn: sqlite3.Connection) -> None:
              json.dumps(g.get("settings", {}), ensure_ascii=False), now_iso()),
         )
         game_id = cur.lastrowid
-        for i, p in enumerate(g["prizes"]):
-            label, kind, amount, max_amount, weight, *rest = p
-            conn.execute(
-                "INSERT INTO prizes (game_id, label, kind, amount, max_amount, weight, min_score, color, sort)"
-                " VALUES (?,?,?,?,?,?,?,?,?)",
-                (game_id, label, kind, amount, max_amount, weight, rest[0] if rest else 0,
-                 DEFAULT_COLORS[i % len(DEFAULT_COLORS)], i),
-            )
         for word, answer, wrong in g.get("questions", []):
             conn.execute(
                 "INSERT INTO questions (game_id, word, answer, wrong) VALUES (?,?,?,?)",
                 (game_id, word, answer, json.dumps(wrong, ensure_ascii=False)),
             )
+
+
+# ---------------------------------------------------------------- prize plan (approved by the owner, Oct 2026)
+
+PLAN_VERSION = "2"
+NO_CAP = 10_000_000  # rials = one course (~1M toman): in practice no cap, but the API needs a number
+# wheel / scratch: everyone wins at least 10%; weight = out of 1000 plays; wheel order and colours
+CHANCE_PLAN = [
+    ("۱۰٪ تخفیف", 10, 500, "#F26600"),
+    ("۳۰٪ تخفیف", 30, 140, "#33357D"),
+    ("۲۰٪ تخفیف", 20, 280, "#FCE0CC"),
+    ("۹۰٪ تخفیف", 90, 1, "#FFCC00"),
+    ("۴۰٪ تخفیف", 40, 60, "#F7A366"),
+    ("۵۰٪ تخفیف", 50, 19, "#572401"),
+]
+# quiz: (label, percent, correct answers needed)
+QUIZ_PLAN = [("۱۰٪ تخفیف", 10, 0), ("۲۰٪ تخفیف", 20, 2), ("۳۰٪ تخفیف", 30, 3), ("۴۰٪ تخفیف", 40, 4),
+             ("۵۰٪ تخفیف", 50, 5)]
+OLD_RULES = {'wheel': 'هر شماره موبایل یک بار می\u200cتونه بچرخونه. کد تخفیف روی همون شماره در زبانیاد فعال می\u200cشه.', 'scratch': 'هر شماره موبایل یک بار می\u200cتونه کارت رو بخراشه.', 'words': '۵ کلمه، ۶۰ ثانیه. با ۳ جواب درست ۱۰٪، با ۴ جواب ۱۵٪ و با ۵ جواب ۲۵٪ تخفیف می\u200cگیری.'}
+NEW_RULES = {'wheel': 'هر چرخش یک شانس مصرف می\u200cکند. همه برنده\u200cاند: از ۱۰٪ تا ۹۰٪ تخفیف! کد روی همان شماره در زبانیاد فعال می\u200cشود.', 'scratch': 'هر کارت یک شانس مصرف می\u200cکند. همه برنده\u200cاند: از ۱۰٪ تا ۹۰٪ تخفیف!', 'words': '۵ کلمه، ۶۰ ثانیه، یک شانس. ۰ تا ۱ جواب درست ۱۰٪، ۲ جواب ۲۰٪، ۳ جواب ۳۰٪، ۴ جواب ۴۰٪ و ۵ جواب ۵۰٪ تخفیف.'}
+
+
+def apply_prize_plan(conn: sqlite3.Connection) -> None:
+    """Puts the approved prize plan on the three built-in games once (old prize rows stay, marked deleted)."""
+    done = conn.execute("SELECT value FROM settings WHERE key='prize_plan'").fetchone()
+    if done and done[0] == PLAN_VERSION:
+        return
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        for g in conn.execute("SELECT id, slug, kind, rules FROM games WHERE slug IN ('wheel','scratch','words')"):
+            conn.execute("UPDATE prizes SET deleted=1, active=0 WHERE game_id=?", (g["id"],))
+            if g["kind"] == "quiz":
+                rows = [(label, pct, 1, score, DEFAULT_COLORS[i % len(DEFAULT_COLORS)])
+                        for i, (label, pct, score) in enumerate(QUIZ_PLAN)]
+            else:
+                rows = [(label, pct, weight, 0, color) for label, pct, weight, color in CHANCE_PLAN]
+            for i, (label, pct, weight, score, color) in enumerate(rows):
+                conn.execute("INSERT INTO prizes (game_id, label, kind, amount, max_amount, weight, min_score, color,"
+                             " sort) VALUES (?,?,?,?,?,?,?,?,?)",
+                             (g["id"], label, "percentage", pct, NO_CAP, weight, score, color, i))
+            if g["rules"] == OLD_RULES.get(g["slug"]):
+                conn.execute("UPDATE games SET rules=? WHERE id=?", (NEW_RULES[g["slug"]], g["id"]))
+        conn.execute("INSERT INTO settings (key, value) VALUES ('prize_plan', ?)"
+                     " ON CONFLICT(key) DO UPDATE SET value=excluded.value", (PLAN_VERSION,))
+    except BaseException:
+        conn.execute("ROLLBACK")
+        raise
+    conn.execute("COMMIT")

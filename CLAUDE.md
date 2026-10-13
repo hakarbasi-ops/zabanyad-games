@@ -38,6 +38,18 @@ play/quiz-start require it when `OTP_REQUIRED=1`. `SMS_MODE=mock` returns the co
 sender (`otp._deliver`) is NOT written yet: waiting for the SMS/OTP API doc (Zabanyad's own or their SMS panel).
 Game pages show a yellow "test mode" notice while `DISCOUNT_MODE=mock` (codes start with T and do not work).
 
+## Prizes and chances (owner-approved plan, v5)
+- Wheel/scratch (6 slices, NO "empty" prize, min 10%): weights per 1000 → 10%:500, 20%:280, 30%:140, 40%:60,
+  50%:19, 90%:1 (0.1%, no stock cap). Quiz ladder: 0-1 correct 10%, 2→20, 3→30, 4→40, 5→50. max_amount =
+  `db.NO_CAP` 10,000,000 rial (≈ one course; owner wants no cap but the API needs a number). `db.apply_prize_plan`
+  installs this once (settings key prize_plan=2) on wheel/scratch/words; old prize rows kept as deleted.
+- Chances (`app/wallet.py`, tables players/referrals/settings): new player 3, invited player 3+1=4, +1 per day
+  visited (no pile-up), inviter +3 per new verified player (only mobiles that never played; max 10/day; no self-invite).
+  Every play costs 1 chance (shared by all games), refunded when the play does not count. Replaces the old per-game
+  plays_per_mobile limit (fields hidden in the editor). Referral switch `referral_enabled` stays OFF until real SMS
+  exists. Panel tab «شانس‌ها و دعوت». Invite link = `/?r=<ref_code>` (common.js stores it; sent with /api/otp/verify).
+  OTP token now lasts 30 days (it is the player's login on that device).
+
 ## Production
 ArvanCloud server 85.198.52.230 (Ubuntu 24.04, min 1 vCPU / 1 GB / 20 GB), `games.zabanyad.com`. Owner deploys himself as root (scp+ssh from a Mac, files in ~/Downloads; I cannot reach the server): always give commands with root@85.198.52.230, no sudo.
 Iranian servers may not reach PyPI/Docker Hub: `deploy/install.sh` installs from `deploy/wheels` (cp312 manylinux;

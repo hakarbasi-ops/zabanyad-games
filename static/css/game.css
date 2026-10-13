@@ -137,6 +137,22 @@ body {
 }
 .sheet .notice { margin: 8px 0; }
 
+/* ---------------- chances bar + invite */
+.wallet {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  background: #fff; border-radius: var(--radius-lg); box-shadow: var(--shadow);
+  padding: 10px 12px 10px 10px; margin-bottom: 12px;
+}
+.wallet-count { display: flex; align-items: center; gap: 8px; font-size: 14px; color: var(--dark-3); }
+.wallet-count b { color: var(--brand); font-size: 18px; }
+.wallet-icon { width: 34px; height: 34px; border-radius: 10px; background: var(--brand-lighter); display: grid; place-items: center; }
+.wallet-invite {
+  font: inherit; font-weight: 700; font-size: 13px; border: 0; cursor: pointer; white-space: nowrap;
+  background: var(--brand-lighter); color: var(--brand); border-radius: var(--radius); padding: 8px 12px;
+}
+.code-box b.link-text { font-size: 13px; letter-spacing: 0; overflow-wrap: anywhere; font-weight: 600; }
+.sheet .btn { margin-top: 10px; }
+
 /* ---------------- wheel */
 .wheel-wrap { position: relative; width: min(320px, 100%); margin: 8px auto 4px; aspect-ratio: 1; }
 .wheel-wrap svg.wheel { width: 100%; height: 100%; transition: transform 5.2s cubic-bezier(.12, .7, .08, 1); filter: drop-shadow(0 8px 18px rgba(242, 102, 0, .18)); }

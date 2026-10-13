@@ -19,33 +19,29 @@ def test_disabled_game_is_closed(client):
     assert r.status_code == 400 and r.json()["code"] == "closed"
 
 
-def test_wheel_play_once_per_mobile(admin):
+def test_wheel_uses_chances(admin):
     enable(admin, "wheel")
     info = admin.get("/api/games/wheel").json()
-    assert info["open"] and len(info["slices"]) == 8
-    r = admin.post("/api/games/wheel/play", json={"mobile": "09120000002"})
-    assert r.status_code == 200, r.text
-    body = r.json()
-    assert info["slices"][body["prize_index"]]["label"] == body["prize_label"]
-    if body["result"] == "won":
-        assert body["code"].startswith("T")
+    assert info["open"] and len(info["slices"]) == 6
+    for left in (2, 1, 0):
+        r = admin.post("/api/games/wheel/play", json={"mobile": "09120000002"})
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["result"] == "won" and body["code"].startswith("T") and body["chances"] == left
+        assert info["slices"][body["prize_index"]]["label"] == body["prize_label"]
     again = admin.post("/api/games/wheel/play", json={"mobile": "۰۹۱۲۰۰۰۰۰۰۲"})
-    assert again.status_code == 429 and again.json()["code"] == "limit"
+    assert again.status_code == 429 and again.json()["code"] == "no_chances"
 
 
 def test_stock_and_weights(admin):
     game = enable(admin, "scratch")
     for p in game["prizes"]:
-        p["weight"] = 1 if p["label"] == "۲۵٪ تخفیف" else 0
-        p["stock"] = 1 if p["label"] == "۲۵٪ تخفیف" else None
-    game["prizes"][-1]["weight"] = 1  # "no prize" keeps a chance so the game can continue
-    admin.put(f"/api/admin/games/{game['id']}", json=game)
-    first = admin.post("/api/games/scratch/play", json={"mobile": "09120000003"}).json()
-    second = admin.post("/api/games/scratch/play", json={"mobile": "09120000004"}).json()
-    labels = [first["prize_label"], second["prize_label"]]
-    assert labels.count("۲۵٪ تخفیف") <= 1
-    won = [x for x in (first, second) if x["result"] == "won"]
-    assert len(won) <= 1
+        p["weight"] = 1 if p["label"] in ("۹۰٪ تخفیف", "۱۰٪ تخفیف") else 0
+        p["stock"] = 1 if p["label"] == "۹۰٪ تخفیف" else None
+    assert admin.put(f"/api/admin/games/{game['id']}", json=game).status_code == 200
+    labels = [admin.post("/api/games/scratch/play", json={"mobile": m}).json()["prize_label"]
+              for m in ("09120000003", "09120000004", "09120000003", "09120000004")]
+    assert labels.count("۹۰٪ تخفیف") <= 1 and set(labels) <= {"۹۰٪ تخفیف", "۱۰٪ تخفیف"}
 
 
 def test_need_signup_does_not_count(admin, monkeypatch):
@@ -62,6 +58,7 @@ def test_need_signup_does_not_count(admin, monkeypatch):
     monkeypatch.undo()
     r = admin.post("/api/games/scratch/play", json={"mobile": "09120000005"})
     assert r.status_code == 200 and r.json()["result"] == "won"
+    assert r.json()["chances"] == 2  # the refused play gave its chance back
 
 
 def test_quiz_scoring(admin):
@@ -76,18 +73,18 @@ def test_quiz_scoring(admin):
     first = start["questions"][0]
     answers[str(first["id"])] = next(o for o in first["options"] if o != answers[str(first["id"])])
     r = admin.post("/api/games/words/quiz/finish", json={"token": start["token"], "answers": answers}).json()
-    assert r["score"] == 4 and r["result"] == "won" and r["prize_label"] == "۱۵٪ تخفیف"
+    assert r["score"] == 4 and r["result"] == "won" and r["prize_label"] == "۴۰٪ تخفیف"
     dup = admin.post("/api/games/words/quiz/finish", json={"token": start["token"], "answers": answers})
     assert dup.status_code == 409
     again = admin.post("/api/games/words/quiz/start", json={"mobile": "09120000006"})
-    assert again.status_code == 429
+    assert again.status_code == 200 and again.json()["chances"] == 1
 
 
-def test_quiz_low_score_loses(admin):
+def test_quiz_low_score_still_wins_10(admin):
     enable(admin, "words")
     start = admin.post("/api/games/words/quiz/start", json={"mobile": "09120000007"}).json()
     r = admin.post("/api/games/words/quiz/finish", json={"token": start["token"], "answers": {}}).json()
-    assert r["score"] == 0 and r["result"] == "lost"
+    assert r["score"] == 0 and r["result"] == "won" and r["prize_label"] == "۱۰٪ تخفیف"
 
 
 def test_admin_requires_login(client):

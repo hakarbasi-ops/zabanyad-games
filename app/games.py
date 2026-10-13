@@ -7,21 +7,12 @@ import random
 import secrets
 from datetime import datetime, timedelta
 
-from . import config, db, discount
+from . import config, db, discount, wallet
+from .errors import PlayError  # noqa: F401  (re-exported: games.PlayError)
 from .util import code_validity, local_day_start_utc, local_now, now_iso, parse_local, utcnow
 
 RNG = random.SystemRandom()
 QUIZ_GRACE_SECONDS = 10
-
-
-class PlayError(Exception):
-    """Shown to the player. `code` lets the page react (e.g. show the sign-up link)."""
-
-    def __init__(self, code: str, message: str, status: int = 400):
-        super().__init__(message)
-        self.code = code
-        self.message = message
-        self.status = status
 
 
 # ---------------------------------------------------------------- loading
@@ -85,24 +76,7 @@ def _check_limits(conn, game: dict, mobile: str, ip: str) -> None:
     if not ok:
         raise PlayError("closed", message)
 
-    # pending quiz runs count too, so a quiz cannot be restarted until a good question set shows up
-    counted = "status IN ('won','lost','pending')"
-    params = [game["id"], mobile]
-    since = ""
-    if game["period_days"] > 0:
-        since = " AND created_at >= ?"
-        params.append((utcnow() - timedelta(days=game["period_days"])).isoformat(timespec="seconds"))
-    used = conn.execute(
-        f"SELECT COUNT(*) FROM plays WHERE game_id=? AND mobile=? AND {counted}{since}", params
-    ).fetchone()[0]
-    limit = max(game["plays_per_mobile"], 1)
-    if used >= limit:
-        if game["period_days"] > 0:
-            msg = f"با این شماره در {game['period_days']} روز گذشته بازی کرده‌اید. بعداً دوباره سر بزنید."
-        else:
-            msg = "با این شماره قبلاً بازی کرده‌اید. هر شماره فقط یک بار می‌تواند بازی کند." if limit == 1 \
-                else "سهم بازی این شماره تمام شده."
-        raise PlayError("limit", msg, 429)
+    # how often a mobile may play is set by its chances (wallet.py), shared by all games
 
     hour_ago = (utcnow() - timedelta(hours=1)).isoformat(timespec="seconds")
     from_ip = conn.execute("SELECT COUNT(*) FROM plays WHERE ip=? AND created_at >= ?", (ip, hour_ago)).fetchone()[0]
@@ -169,6 +143,7 @@ def _issue(conn, game: dict, play_id: int, prize: dict, mobile: str) -> dict:
             conn.execute("UPDATE plays SET status=?, error=?, finished_at=? WHERE id=?",
                          (status, f"{exc.kind}: {exc.detail}"[:300], now_iso(), play_id))
             _release(conn, prize["id"])
+            wallet.refund(conn, mobile)  # this play does not count
         if status == "need_signup":
             raise PlayError("need_signup",
                             "این شماره در زبانیاد ثبت‌نام نکرده. اول با همین شماره در زبانیاد ثبت‌نام کنید و "
@@ -205,12 +180,13 @@ def play_chance(conn, slug: str, mobile: str, ip: str) -> dict:
         prize = draw(_usable(conn, game, prizes))
         if not prize:
             raise PlayError("no_prizes", "جایزه‌های این بازی تمام شده.", 409)
+        wallet.spend(conn, mobile)
         _reserve(conn, prize)
         play_id = _new_play(conn, game, mobile, ip, prize)
 
     outcome = _issue(conn, game, play_id, prize, mobile)
     index = next(i for i, p in enumerate(prizes) if p["id"] == prize["id"])
-    return {**outcome, "prize_index": index, "prize_label": prize["label"]}
+    return {**outcome, "prize_index": index, "prize_label": prize["label"], "chances": wallet.chances(conn, mobile)}
 
 
 # ---------------------------------------------------------------- quiz
@@ -243,9 +219,10 @@ def quiz_start(conn, slug: str, mobile: str, ip: str) -> dict:
     time_limit = int(game["settings"].get("time_limit", 60))
     with db.LOCK, db.transaction(conn):
         _check_limits(conn, game, mobile, ip)
+        wallet.spend(conn, mobile)
         _new_play(conn, game, mobile, ip, None, token=token, total=count,
                   data={"questions": [q["id"] for q in picked], "time_limit": time_limit})
-    return {"token": token, "questions": shown, "time_limit": time_limit}
+    return {"token": token, "questions": shown, "time_limit": time_limit, "chances": wallet.chances(conn, mobile)}
 
 
 def quiz_finish(conn, slug: str, token: str, answers: dict) -> dict:
@@ -286,9 +263,9 @@ def quiz_finish(conn, slug: str, token: str, answers: dict) -> dict:
 
     result = {"score": score, "total": play["total"], "late": late}
     if not prize:
-        return {**result, "result": "lost", "prize_label": ""}
+        return {**result, "result": "lost", "prize_label": "", "chances": wallet.chances(conn, play["mobile"])}
     outcome = _issue(conn, game, play["id"], prize, play["mobile"])
-    return {**result, **outcome, "prize_label": prize["label"]}
+    return {**result, **outcome, "prize_label": prize["label"], "chances": wallet.chances(conn, play["mobile"])}
 
 
 def expire_stale(conn) -> None:

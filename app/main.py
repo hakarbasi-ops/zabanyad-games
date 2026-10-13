@@ -7,7 +7,7 @@ from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
-from . import admin, config, db, discount, games, otp
+from . import admin, config, db, discount, games, otp, wallet
 from .util import normalize_mobile
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
@@ -99,6 +99,7 @@ class MobileIn(BaseModel):
 class OtpVerifyIn(BaseModel):
     mobile: str
     code: str
+    ref: str | None = None
 
 
 def _mobile(raw: str) -> str:
@@ -115,7 +116,16 @@ def otp_send(body: MobileIn, request: Request):
 
 @app.post("/api/otp/verify")
 def otp_verify(body: OtpVerifyIn):
-    return otp.verify(_mobile(body.mobile), body.code)
+    return otp.verify(_mobile(body.mobile), body.code, body.ref)
+
+
+@app.post("/api/me")
+def me(body: MobileIn):
+    """The player's chances and invite code (also adds today's chance)."""
+    mobile = _mobile(body.mobile)
+    otp.check(mobile, body.otp_token)
+    with db.session() as conn, db.LOCK, db.transaction(conn):
+        return wallet.view(conn, wallet.ensure(conn, mobile))
 
 
 @app.post("/api/games/{slug}/play")

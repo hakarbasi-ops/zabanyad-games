@@ -13,13 +13,13 @@ from datetime import datetime, timedelta
 
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
-from . import config, db
+from . import config, db, wallet
 from .games import PlayError
 from .util import now_iso, utcnow
 
 CODE_DIGITS = 5
 CODE_MINUTES = 2          # an SMS code is valid this long
-VERIFY_MINUTES = 30       # after verifying, the mobile may play this long without a new code
+VERIFY_MINUTES = 30 * 24 * 60  # after verifying, the mobile stays signed in on that device for 30 days
 RESEND_SECONDS = 60
 MAX_PER_MOBILE_HOUR = 5
 MAX_PER_IP_HOUR = 20
@@ -75,7 +75,7 @@ def send(mobile: str, ip: str) -> dict:
     return out
 
 
-def verify(mobile: str, code: str) -> dict:
+def verify(mobile: str, code: str, ref: str | None = None) -> dict:
     code = (code or "").strip()
     with db.session() as conn:
         with db.transaction(conn):
@@ -90,7 +90,10 @@ def verify(mobile: str, code: str) -> dict:
             conn.execute("UPDATE otps SET tries = tries + 1, used = ? WHERE id=?", (int(good), row["id"]))
     if not good:
         raise PlayError("otp_wrong", "کد تأیید درست نیست.", 400)
-    return {"token": _serializer.dumps(mobile), "valid_minutes": VERIFY_MINUTES}
+    with db.session() as conn, db.LOCK, db.transaction(conn):
+        player = wallet.ensure(conn, mobile, ref)  # new players get their chances (and the inviter's reward) here
+        view = wallet.view(conn, player)
+    return {"token": _serializer.dumps(mobile), "valid_minutes": VERIFY_MINUTES, "wallet": view}
 
 
 def check(mobile: str, token: str | None) -> None:

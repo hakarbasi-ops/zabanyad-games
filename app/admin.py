@@ -14,7 +14,7 @@ from fastapi.responses import StreamingResponse
 from itsdangerous import BadSignature, TimestampSigner
 from pydantic import BaseModel, Field, field_validator
 
-from . import config, db, discount, games
+from . import config, db, discount, games, wallet
 from .util import TZ, code_validity, normalize_mobile, now_iso, utcnow
 
 router = APIRouter(prefix="/api/admin")
@@ -414,3 +414,50 @@ def test_code(body: TestCodeIn):
 def api_log(limit: int = 30):
     with db.session() as conn:
         return db.rows(conn.execute("SELECT * FROM api_log ORDER BY id DESC LIMIT ?", (max(1, min(limit, 200)),)))
+
+
+# ---------------------------------------------------------------- chances and invites
+
+
+@router.get("/chance-settings", dependencies=[Depends(require_admin)])
+def get_chance_settings():
+    with db.session() as conn:
+        return wallet.settings(conn)
+
+
+@router.put("/chance-settings", dependencies=[Depends(require_admin)])
+def put_chance_settings(body: dict):
+    try:
+        values = {k: int(v) for k, v in body.items() if k in wallet.LIMITS}
+    except (TypeError, ValueError):
+        raise HTTPException(400, "عددها درست نیستند.")
+    with db.session() as conn, db.transaction(conn):
+        return wallet.save_settings(conn, values)
+
+
+class GrantIn(BaseModel):
+    mobile: str
+    count: int = Field(ge=-100, le=100)
+
+
+@router.post("/grant-chances", dependencies=[Depends(require_admin)])
+def grant_chances(body: GrantIn):
+    mobile = normalize_mobile(body.mobile)
+    if not mobile:
+        raise HTTPException(400, "شماره موبایل درست نیست.")
+    with db.session() as conn, db.LOCK, db.transaction(conn):
+        player = wallet.grant(conn, mobile, body.count)
+    return {"mobile": mobile, "chances": player["chances"]}
+
+
+@router.get("/referrals", dependencies=[Depends(require_admin)])
+def referrals():
+    with db.session() as conn:
+        top = db.rows(conn.execute(
+            "SELECT mobile, invites, chances, ref_code FROM players WHERE invites > 0 ORDER BY invites DESC LIMIT 30"))
+        recent = db.rows(conn.execute(
+            "SELECT inviter, invitee, reward, created_at FROM referrals ORDER BY id DESC LIMIT 30"))
+        totals = dict(conn.execute(
+            "SELECT (SELECT COUNT(*) FROM players) AS players, (SELECT COUNT(*) FROM referrals) AS referrals,"
+            " (SELECT COALESCE(SUM(chances), 0) FROM players) AS open_chances").fetchone())
+    return {"top": top, "recent": recent, "totals": totals}

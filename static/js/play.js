@@ -31,6 +31,55 @@
       app.before(el("p", { class: "notice" },
         "حالت آزمایشی: کدهای تخفیف این صفحه ساختگی‌اند (با T شروع می‌شوند) و در زبانیاد کار نمی‌کنند."));
     }
+    app.before(walletBar);
+    const saved = store.get("zg:otp");
+    if (saved && saved.until > Date.now()) refreshWallet(saved.mobile, saved.token);
+  }
+
+  // ------------------------------------------------------------ chances + invites
+
+  const walletBar = el("div", { class: "wallet hidden" });
+  let wallet = null;
+
+  async function refreshWallet(mobile, token) {
+    try {
+      showWallet(await api("/api/me", { method: "POST", body: { mobile, otp_token: token } }));
+    } catch (e) {
+      if (e.code === "need_otp") store.set("zg:otp", null);
+    }
+  }
+
+  function showWallet(w) {
+    wallet = { ...(wallet || {}), ...w };
+    const n = wallet.chances;
+    walletBar.replaceChildren(
+      el("div", { class: "wallet-count" }, el("span", { class: "wallet-icon" }, "🎟️"),
+        n > 0 ? el("span", {}, el("b", {}, fa(n)), " شانس داری") : el("span", {}, "شانست تموم شد؛ فردا یه شانس تازه داری")),
+      wallet.referral_enabled ? el("button", { class: "wallet-invite", type: "button", onclick: showInvite }, "🎁 دعوت دوستان") : "");
+    walletBar.classList.remove("hidden");
+  }
+
+  function showInvite() {
+    if (!wallet || !wallet.ref_code) return;
+    const link = `${location.origin}/?r=${wallet.ref_code}`;
+    const text = `با این لینک وارد بازی‌های زبانیاد شو، ${fa(wallet.invitee_chances)} شانس هدیه بگیر و کد تخفیف ببر! ${link}`;
+    const close = () => overlay.remove();
+    const copyBtn = el("button", { type: "button" }, "کپی");
+    copyBtn.addEventListener("click", async () => { copyBtn.textContent = (await copy(link)) ? "کپی شد ✓" : "کپی نشد"; });
+    const share = navigator.share ? el("button", { class: "btn", type: "button",
+      onclick: () => navigator.share({ title: "بازی‌های زبانیاد", text, url: link }).catch(() => {}) }, "اشتراک‌گذاری لینک") : "";
+    const overlay = el("div", { class: "overlay", onclick: (e) => e.target === overlay && close() },
+      el("div", { class: "sheet", role: "dialog", "aria-modal": "true" },
+        el("div", { class: "big" }, "🎁"),
+        el("h2", {}, "دوستات رو دعوت کن، شانس هدیه بگیر!"),
+        el("p", {}, `هر دوستی که با لینک تو بیاد و شماره‌اش رو تأیید کنه، ${fa(wallet.referral_reward)} شانس برای تو و ${fa(wallet.invitee_chances)} شانس برای خودش.`),
+        el("div", { class: "code-box" }, el("b", { class: "link-text" }, link), copyBtn),
+        wallet.invites ? el("p", { class: "muted" }, `تا الان ${fa(wallet.invites)} نفر رو دعوت کردی.`) : "",
+        share,
+        el("a", { class: "btn outline", href: `https://wa.me/?text=${encodeURIComponent(text)}`, target: "_blank", rel: "noopener" }, "ارسال در واتس‌اپ"),
+        el("a", { class: "btn outline", href: `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(text.replace(link, ""))}`, target: "_blank", rel: "noopener" }, "ارسال در تلگرام"),
+        el("button", { class: "link", type: "button", onclick: close }, "بستن")));
+    document.body.append(overlay);
   }
 
   // ------------------------------------------------------------ shared pieces
@@ -92,6 +141,12 @@
     } catch (e) {
       if (e.code === "need_otp") store.set("zg:otp", null);
       showError(box, e);
+      if (e.code === "no_chances") {
+        if (wallet) showWallet({ chances: 0 });
+        if (wallet && wallet.referral_enabled) {
+          box.append(el("button", { class: "btn", type: "button", onclick: showInvite }, "🎁 دعوت دوستان و گرفتن شانس"));
+        }
+      }
       button.disabled = false;
       return null;
     }
@@ -155,8 +210,9 @@
         }
         ok.disabled = true;
         try {
-          const r = await api("/api/otp/verify", { method: "POST", body: { mobile, code: value } });
+          const r = await api("/api/otp/verify", { method: "POST", body: { mobile, code: value, ref: store.get("zg:ref") } });
           store.set("zg:otp", { mobile, token: r.token, until: Date.now() + r.valid_minutes * 60000 });
+          if (r.wallet) showWallet(r.wallet);
           finish(r.token);
         } catch (e) {
           showError(err, e);
@@ -184,6 +240,13 @@
   }
 
   function remember(res, mobile) {
+    if (typeof res.chances === "number") {
+      if (wallet) showWallet({ chances: res.chances });
+      else {
+        const saved = store.get("zg:otp");
+        refreshWallet(mobile, saved && saved.mobile === mobile ? saved.token : null);
+      }
+    }
     if (res.result === "won") store.set(storeKey, { ...res, mobile });
   }
 
@@ -394,7 +457,10 @@
 
     button.addEventListener("click", async () => {
       const got = await start(input.querySelector("input"), box, button, `/api/games/${slug}/quiz/start`);
-      if (got) runQuiz(got.res, got.mobile);
+      if (got) {
+        if (wallet && typeof got.res.chances === "number") showWallet({ chances: got.res.chances });
+        runQuiz(got.res, got.mobile);
+      }
     });
   }
 

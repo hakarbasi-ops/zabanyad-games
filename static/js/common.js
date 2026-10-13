@@ -115,5 +115,11 @@
     }
   }
 
+  // invite links look like /?r=AB12CD: keep the code until this visitor verifies a mobile
+  try {
+    const ref = new URLSearchParams(location.search).get("r");
+    if (ref && /^[A-Za-z0-9]{4,12}$/.test(ref)) store.set("zg:ref", ref.toUpperCase());
+  } catch (e) { /* ignore */ }
+
   window.ZG = { fa, money, jalaliDate, api, el, store, copy };
 })();
