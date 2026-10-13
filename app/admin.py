@@ -85,6 +85,7 @@ def me():
         "shop_url": config.SHOP_URL,
         "otp_required": config.OTP_REQUIRED,
         "sms_mode": config.SMS_MODE,
+        "sms_template": config.KAVENEGAR_TEMPLATE,
     }
 
 

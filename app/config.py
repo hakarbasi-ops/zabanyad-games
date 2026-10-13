@@ -51,8 +51,10 @@ ADMIN_PASSWORD = env("ADMIN_PASSWORD")
 
 # Players confirm their mobile with an SMS code before playing.
 OTP_REQUIRED = env("OTP_REQUIRED", "1") == "1"
-# "mock" = no SMS, the code is shown on the page (testing only); the real sender is added in otp._deliver.
-SMS_MODE = env("SMS_MODE", "mock").lower()
+# "kavenegar" = real SMS (Verify Lookup with a template); "mock" = no SMS, the code is shown on the page (testing only)
+KAVENEGAR_API_KEY = env("KAVENEGAR_API_KEY")
+KAVENEGAR_TEMPLATE = env("KAVENEGAR_TEMPLATE")
+SMS_MODE = env("SMS_MODE", "kavenegar" if KAVENEGAR_API_KEY else "mock").lower()
 
 # Max game attempts (plays + quiz starts) from one IP per hour.
 IP_PLAYS_PER_HOUR = int(env("IP_PLAYS_PER_HOUR", "30"))

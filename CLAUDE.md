@@ -31,12 +31,21 @@ yesterday 00:00 Tehran (in case Zabanyad reads dates as UTC), percentage prizes 
 cap; test form used to send 0), and every API call is logged in `api_log` (body + status + response, never the secret),
 shown on the panel's «اتصال به زبانیاد» page. Ask the backend team about timezone / validity if it still fails. Prize labels shown to players may say toman.
 
-## SMS verification (`app/otp.py`)
-Owner wants each player's mobile confirmed by SMS before playing. `/api/otp/send` → 5-digit code (2 min, resend after
-60 s, 5/hour per mobile, 20/hour per IP, 5 wrong tries), `/api/otp/verify` → signed token (30 min) bound to the mobile;
-play/quiz-start require it when `OTP_REQUIRED=1`. `SMS_MODE=mock` returns the code to the page (testing). The real
-sender (`otp._deliver`) is NOT written yet: waiting for the SMS/OTP API doc (Zabanyad's own or their SMS panel).
+## SMS verification (`app/otp.py`, `app/sms.py`)
+Each player's mobile is confirmed by SMS before playing. `/api/otp/send` → 5-digit code (2 min, resend after 60 s,
+5/hour per mobile, 20/hour per IP, 5 wrong tries), `/api/otp/verify` → signed token (30 days, the player's sign-in on
+that browser) bound to the mobile; play/quiz-start/me/my-codes require it when `OTP_REQUIRED=1`.
+Real SMS = Kavenegar Verify Lookup (Zabanyad's provider): `KAVENEGAR_API_KEY` + `KAVENEGAR_TEMPLATE` (a template with
+%token, made in the Kavenegar panel), typed on the server with `set-credentials.sh` → `SMS_MODE=kavenegar`. Every send
+is logged in `api_log` (mode "sms", receptor + template + Kavenegar status; never the key, which is in the URL path).
+A failed send deletes its otp row (no resend wait). `SMS_MODE=mock` shows the code on the page (testing).
+Front end: `static/js/otp.js` (`ZG.verifyMobile`, `ZG.session`) shared by the game pages and `/my`.
 Game pages show a yellow "test mode" notice while `DISCOUNT_MODE=mock` (codes start with T and do not work).
+
+## My codes (`/my`, `POST /api/my-codes`)
+Sign in with the SMS code; lists every won code, active ones soonest-to-expire first («امروز آخرین روزه!», «فقط ۲ روز
+مونده!»), then expired; buy button → SHOP_URL. Linked from the app bar («کدهای من») and every result sheet.
+Out of chances → bottom sheet pushing the invite (when referrals are on) + link to /my.
 
 ## Prizes and chances (owner-approved plan, v5)
 - Wheel/scratch (6 slices, NO "empty" prize, min 10%): weights per 1000 → 10%:500, 20%:280, 30%:140, 40%:60,

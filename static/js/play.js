@@ -59,6 +59,23 @@
     walletBar.classList.remove("hidden");
   }
 
+  // out of chances: push the invite, the only way to play again today
+  function showOutOfChances(message) {
+    const close = () => overlay.remove();
+    const canInvite = wallet && wallet.referral_enabled && wallet.ref_code;
+    const overlay = el("div", { class: "overlay", onclick: (e) => e.target === overlay && close() },
+      el("div", { class: "sheet", role: "dialog", "aria-modal": "true" },
+        el("div", { class: "big" }, "🎟️"),
+        el("h2", {}, "شانس‌های امروزت تموم شد!"),
+        el("p", {}, canInvite
+          ? `می‌خوای همین الان دوباره بازی کنی؟ هر دوستی که دعوت کنی، ${fa(wallet.referral_reward)} شانس تازه برات میاره.`
+          : (message || "فردا یه شانس تازه داری.")),
+        canInvite ? el("button", { class: "btn", type: "button", onclick: () => { close(); showInvite(); } }, "🎁 دعوت دوستان و گرفتن شانس") : "",
+        el("a", { class: "btn outline", href: "/my" }, "دیدن کدهای تخفیف من"),
+        el("button", { class: "link", type: "button", onclick: close }, "فردا برمی‌گردم")));
+    document.body.append(overlay);
+  }
+
   function showInvite() {
     if (!wallet || !wallet.ref_code) return;
     const link = `${location.origin}/?r=${wallet.ref_code}`;
@@ -130,7 +147,9 @@
     button.disabled = true;
     let otp_token = null;
     if (info.otp) {
-      otp_token = await verifyMobile(mobile, input, box, button);
+      otp_token = await ZG.verifyMobile(mobile, {
+        input, button, onError: (e) => showError(box, e), onWallet: (w) => showWallet(w),
+      });
       if (!otp_token) {
         button.disabled = false;
         return null;
@@ -140,103 +159,15 @@
       return { mobile, res: await api(path, { method: "POST", body: { mobile, otp_token, ...(extraBody || {}) } }) };
     } catch (e) {
       if (e.code === "need_otp") store.set("zg:otp", null);
-      showError(box, e);
       if (e.code === "no_chances") {
         if (wallet) showWallet({ chances: 0 });
-        if (wallet && wallet.referral_enabled) {
-          box.append(el("button", { class: "btn", type: "button", onclick: showInvite }, "🎁 دعوت دوستان و گرفتن شانس"));
-        }
+        showOutOfChances(e.message);
+      } else {
+        showError(box, e);
       }
       button.disabled = false;
       return null;
     }
-  }
-
-  // ------------------------------------------------------------ SMS code (proves the mobile is the player's)
-
-  async function verifyMobile(mobile, input, box, button) {
-    const saved = store.get("zg:otp");
-    if (saved && saved.mobile === mobile && saved.until > Date.now() + 60000) return saved.token;
-
-    let sent;
-    try {
-      sent = await api("/api/otp/send", { method: "POST", body: { mobile } });
-    } catch (e) {
-      showError(box, e);
-      return null;
-    }
-
-    return new Promise((resolve) => {
-      const field = input.closest(".field");
-      const code = el("input", {
-        class: "input otp-input", type: "text", inputmode: "numeric", autocomplete: "one-time-code",
-        maxlength: String(sent.digits || 5), placeholder: "–".repeat(sent.digits || 5),
-      });
-      const ok = el("button", { class: "btn", type: "button" }, "تأیید و ادامه");
-      const resend = el("button", { class: "link", type: "button", disabled: true });
-      const change = el("button", { class: "link", type: "button" }, "تغییر شماره");
-      const err = errorBox();
-      const panel = el("div", { class: "otp" },
-        el("p", {}, `کد ${fa(sent.digits || 5)} رقمی‌ای که به ${fa(mobile)} پیامک شد را وارد کنید.`),
-        sent.test_code ? el("p", { class: "notice" }, `حالت آزمایشی (بدون پیامک): کد شما ${fa(sent.test_code)}`) : "",
-        code, ok, err, el("div", { class: "otp-links" }, resend, change));
-      field.after(panel);
-      button.classList.add("hidden");
-      input.disabled = true;
-      code.focus();
-
-      let left = sent.resend_after || 60;
-      const timer = setInterval(() => {
-        left -= 1;
-        resend.disabled = left > 0;
-        resend.textContent = left > 0 ? `ارسال دوباره (${fa(left)})` : "ارسال دوباره‌ی کد";
-        if (left <= 0) clearInterval(timer);
-      }, 1000);
-      resend.textContent = `ارسال دوباره (${fa(left)})`;
-
-      const finish = (token) => {
-        clearInterval(timer);
-        panel.remove();
-        button.classList.remove("hidden");
-        input.disabled = false;
-        resolve(token);
-      };
-      const submit = async () => {
-        err.classList.add("hidden");
-        const value = code.value.replace(/[۰-۹]/g, (d) => "۰۱۲۳۴۵۶۷۸۹".indexOf(d)).replace(/\D/g, "");
-        if (value.length < (sent.digits || 5)) {
-          showError(err, { message: "کد را کامل وارد کنید." });
-          return;
-        }
-        ok.disabled = true;
-        try {
-          const r = await api("/api/otp/verify", { method: "POST", body: { mobile, code: value, ref: store.get("zg:ref") } });
-          store.set("zg:otp", { mobile, token: r.token, until: Date.now() + r.valid_minutes * 60000 });
-          if (r.wallet) showWallet(r.wallet);
-          finish(r.token);
-        } catch (e) {
-          showError(err, e);
-          ok.disabled = false;
-        }
-      };
-      ok.addEventListener("click", submit);
-      code.addEventListener("keydown", (e) => e.key === "Enter" && submit());
-      code.addEventListener("input", () => {
-        const digits = code.value.replace(/[۰-۹]/g, (d) => "۰۱۲۳۴۵۶۷۸۹".indexOf(d)).replace(/\D/g, "");
-        if (digits.length === (sent.digits || 5)) submit();
-      });
-      change.addEventListener("click", () => finish(null));
-      resend.addEventListener("click", async () => {
-        try {
-          const again = await api("/api/otp/send", { method: "POST", body: { mobile } });
-          if (again.test_code) panel.querySelector(".notice").textContent = `حالت آزمایشی (بدون پیامک): کد شما ${fa(again.test_code)}`;
-          left = again.resend_after || 60;
-          resend.disabled = true;
-        } catch (e) {
-          showError(err, e);
-        }
-      });
-    });
   }
 
   function remember(res, mobile) {
@@ -554,6 +485,12 @@
         el("a", { class: "btn", href: info.shop_url, target: "_blank", rel: "noopener" }, "رفتن به زبانیاد"),
       );
     }
+    if (wallet && wallet.chances === 0 && wallet.referral_enabled) {
+      body.push(el("div", { class: "invite-cta" },
+        el("p", {}, `شانس‌هات تموم شد! با دعوت هر دوست ${fa(wallet.referral_reward)} شانس تازه بگیر.`),
+        el("button", { class: "btn outline", type: "button", onclick: () => { close(); showInvite(); } }, "🎁 دعوت دوستان")));
+    }
+    body.push(el("a", { class: "link", href: "/my" }, "همه‌ی کدهای تخفیف من"));
     body.push(el("button", { class: "link", type: "button", onclick: close }, "بستن"));
     const overlay = el("div", { class: "overlay", onclick: (e) => e.target === overlay && close() },
       el("div", { class: "sheet", role: "dialog", "aria-modal": "true" }, body));

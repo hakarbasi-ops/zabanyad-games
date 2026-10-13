@@ -487,14 +487,14 @@
           el("tr", {}, el("th", {}, "نشانی API"), el("td", { class: "ltr small" }, me.api_url)),
           el("tr", {}, el("th", {}, "تأیید شماره با پیامک"), el("td", {}, !me.otp_required ? el("span", { class: "badge off" }, "خاموش")
             : me.sms_mode === "mock" ? el("span", { class: "badge warn" }, "روشن، آزمایشی (کد روی صفحه نشان داده می‌شود)")
-            : el("span", { class: "badge ok" }, "روشن"))),
+            : el("span", { class: "badge ok" }, me.sms_mode === "kavenegar" ? `روشن، کاوه‌نگار (الگو: ${me.sms_template})` : "روشن"))),
           el("tr", {}, el("th", {}, "سایت استفاده از کد"), el("td", { class: "ltr small" }, me.shop_url)))),
         el("p", { class: "muted small" }, "این تنظیمات فقط روی سرور (فایل ‎.env‎) عوض می‌شوند؛ کلید هیچ‌وقت در پنل نشان داده نمی‌شود.")),
       el("div", { class: "card" }, el("h2", {}, "آزمایش ساخت کد"),
         el("p", { class: "note info" }, "در حالت واقعی این دکمه یک کد تخفیف واقعی روی همان شماره در زبانیاد می‌سازد. با شماره‌ی خودتان و درصد کم امتحان کنید."),
         form),
       el("div", { class: "card" },
-        el("div", { class: "row between" }, el("h2", {}, "آخرین درخواست‌ها به زبانیاد"),
+        el("div", { class: "row between" }, el("h2", {}, "آخرین درخواست‌ها به زبانیاد و کاوه‌نگار"),
           el("button", { type: "button", class: "btn light", onclick: () => loadLog() }, "به‌روز کردن")),
         el("p", { class: "muted small" }, "دقیقاً همان چیزی که برای ساخت کد فرستاده شد و جوابی که زبانیاد داد (کلید نشان داده نمی‌شود). برای بررسی مشکل‌ها می‌توانید همین را به تیم بک‌اند نشان دهید."),
         logBox));
@@ -507,7 +507,8 @@
     let rows;
     try { rows = await api("/api/admin/api-log"); } catch (e) { logBox.replaceChildren(el("div", { class: "msg bad" }, e.message)); return; }
     if (!rows.length) { logBox.replaceChildren(el("p", { class: "muted" }, "هنوز درخواستی فرستاده نشده.")); return; }
-    const status = (r) => r.mode !== "live" ? el("span", { class: "badge warn" }, "آزمایشی")
+    const status = (r) => r.mode === "sms" ? el("span", { class: `badge ${r.status === 200 ? "ok" : "bad"}` }, `پیامک ${r.status ?? "—"}`)
+      : r.mode !== "live" ? el("span", { class: "badge warn" }, "آزمایشی")
       : r.status == null ? el("span", { class: "badge bad" }, "بدون اتصال")
       : el("span", { class: `badge ${r.status < 300 ? "ok" : "bad"}` }, String(r.status));
     logBox.replaceChildren(el("table", {},

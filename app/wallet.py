@@ -113,8 +113,11 @@ def _credit_inviter(conn, cfg: dict, mobile: str, ref: str | None) -> str | None
 def spend(conn, mobile: str) -> int:
     player = ensure(conn, mobile)
     if player["chances"] <= 0:
-        raise PlayError("no_chances", "شانس‌هایت تمام شده. فردا یک شانس تازه داری؛ با دعوت دوستانت هم شانس هدیه بگیر.",
-                        429)
+        cfg = settings(conn)
+        msg = "شانس‌هایت تمام شد! فردا یک شانس تازه داری."
+        if cfg["referral_enabled"]:
+            msg = f"شانس‌هایت تمام شد! با دعوت هر دوست {cfg['referral_reward']} شانس تازه بگیر، یا فردا برگرد."
+        raise PlayError("no_chances", msg, 429)
     conn.execute("UPDATE players SET chances = chances - 1 WHERE mobile=?", (mobile,))
     return player["chances"] - 1
 

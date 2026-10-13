@@ -147,11 +147,32 @@ body {
 .wallet-count b { color: var(--brand); font-size: 18px; }
 .wallet-icon { width: 34px; height: 34px; border-radius: 10px; background: var(--brand-lighter); display: grid; place-items: center; }
 .wallet-invite {
+  text-decoration: none;
   font: inherit; font-weight: 700; font-size: 13px; border: 0; cursor: pointer; white-space: nowrap;
   background: var(--brand-lighter); color: var(--brand); border-radius: var(--radius); padding: 8px 12px;
 }
 .code-box b.link-text { font-size: 13px; letter-spacing: 0; overflow-wrap: anywhere; font-weight: 600; }
 .sheet .btn { margin-top: 10px; }
+.invite-cta { margin-top: 16px; padding: 12px; border-radius: 12px; background: var(--brand-lighter); }
+.invite-cta p { margin: 0; color: var(--brand-darker); font-weight: 600; }
+.sheet a.link { text-decoration: underline; }
+
+/* ---------------- my codes */
+.codes { display: flex; flex-direction: column; gap: 12px; }
+.codes-title { font-size: 15px; color: var(--dark-4); margin: 22px 0 10px; }
+.code-card { background: #fff; border-radius: var(--radius-lg); box-shadow: var(--shadow); padding: 16px; }
+.code-card .code-box { margin: 10px 0 4px; }
+.code-card .btn { margin-top: 12px; }
+.code-card.expired { opacity: .55; box-shadow: none; border: 1px solid var(--light-1); }
+.code-head { display: flex; justify-content: space-between; align-items: center; }
+.code-head b { font-size: 18px; }
+.code-badge { font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 99px; background: var(--brand-lighter); color: var(--brand); }
+.code-badge.hot { background: #ffe5e5; color: #c41f1f; }
+.code-badge.off { background: var(--light-2); color: var(--dark-4); }
+.code-meta { margin: 6px 0 0; font-size: 12px; color: var(--dark-4); }
+.link.inline { display: inline; width: auto; margin: 0; font-size: 12px; }
+.appbar .mycodes { margin-inline-start: auto; font-size: 13px; font-weight: 700; color: var(--brand); text-decoration: none;
+  background: var(--brand-lighter); padding: 6px 10px; border-radius: var(--radius); }
 
 /* ---------------- wheel */
 .wheel-wrap { position: relative; width: min(320px, 100%); margin: 8px auto 4px; aspect-ratio: 1; }

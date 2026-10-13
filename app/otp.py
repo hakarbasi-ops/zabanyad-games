@@ -3,8 +3,8 @@
 Flow: POST /api/otp/send {mobile} -> code by SMS; POST /api/otp/verify {mobile, code} -> signed token (valid
 VERIFY_MINUTES) that the play endpoints require for that same mobile.
 
-Who sends the SMS is behind `_deliver()`: "mock" shows the code on screen (testing only). The real sender is wired
-once the SMS/OTP API doc arrives (Zabanyad's own OTP service or the SMS panel they use).
+Who sends the SMS is behind `_deliver()`: "kavenegar" (real SMS, app/sms.py) or "mock" (the code is shown on the
+page; testing only).
 """
 import hashlib
 import hmac
@@ -13,7 +13,7 @@ from datetime import datetime, timedelta
 
 from itsdangerous import BadSignature, SignatureExpired, URLSafeTimedSerializer
 
-from . import config, db, wallet
+from . import config, db, sms, wallet
 from .games import PlayError
 from .util import now_iso, utcnow
 
@@ -43,8 +43,10 @@ def _hash(mobile: str, code: str) -> str:
 def _deliver(mobile: str, code: str) -> None:
     if mode() == "mock":
         return
-    # Real SMS provider goes here (see module docstring).
-    raise PlayError("sms_unavailable", "ارسال پیامک فعلاً ممکن نیست. کمی بعد دوباره امتحان کنید.", 503)
+    if mode() == "kavenegar":
+        sms.send_code(mobile, code)
+        return
+    raise PlayError("sms_unavailable", "ارسال پیامک تنظیم نشده. لطفاً بعداً امتحان کنید.", 503)
 
 
 def send(mobile: str, ip: str) -> dict:
@@ -65,10 +67,15 @@ def send(mobile: str, ip: str) -> dict:
             if per_mobile >= MAX_PER_MOBILE_HOUR or (ip and per_ip >= MAX_PER_IP_HOUR):
                 raise PlayError("otp_rate", "درخواست کد زیاد شد. یک ساعت بعد دوباره امتحان کنید.", 429)
             code = "".join(secrets.choice("0123456789") for _ in range(CODE_DIGITS))
-            conn.execute("INSERT INTO otps (mobile, code_hash, ip, created_at, expires_at) VALUES (?,?,?,?,?)",
+            cur = conn.execute("INSERT INTO otps (mobile, code_hash, ip, created_at, expires_at) VALUES (?,?,?,?,?)",
                          (mobile, _hash(mobile, code), ip, now_iso(),
                           (now + timedelta(minutes=CODE_MINUTES)).isoformat(timespec="seconds")))
-    _deliver(mobile, code)
+    try:
+        _deliver(mobile, code)
+    except PlayError:
+        with db.session() as conn:  # not sent: do not make the player wait for a resend
+            conn.execute("DELETE FROM otps WHERE id=?", (cur.lastrowid,))
+        raise
     out = {"sent": True, "resend_after": RESEND_SECONDS, "digits": CODE_DIGITS}
     if mode() == "mock":
         out["test_code"] = code  # test mode only: there is no SMS, so the page shows the code

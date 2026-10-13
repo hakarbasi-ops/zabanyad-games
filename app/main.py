@@ -8,7 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import admin, config, db, discount, games, otp, wallet
-from .util import normalize_mobile
+from .util import local_now, normalize_mobile
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
@@ -52,6 +52,11 @@ def home():
 @app.get("/g/{slug}", include_in_schema=False)
 def game_page(slug: str):
     return FileResponse(STATIC / "play.html")
+
+
+@app.get("/my", include_in_schema=False)
+def my_page():
+    return FileResponse(STATIC / "my.html")
 
 
 @app.get("/admin", include_in_schema=False)
@@ -126,6 +131,30 @@ def me(body: MobileIn):
     otp.check(mobile, body.otp_token)
     with db.session() as conn, db.LOCK, db.transaction(conn):
         return wallet.view(conn, wallet.ensure(conn, mobile))
+
+
+@app.post("/api/my-codes")
+def my_codes(body: MobileIn):
+    """Every code this mobile has won, the soonest to expire first, then the expired ones."""
+    mobile = _mobile(body.mobile)
+    otp.check(mobile, body.otp_token)
+    now = local_now().strftime("%Y-%m-%d %H:%M:%S")
+    with db.session() as conn:
+        rows = db.rows(conn.execute(
+            "SELECT p.id, p.prize_label, p.code, p.valid_until, p.created_at, g.title AS game, g.kind"
+            " FROM plays p JOIN games g ON g.id=p.game_id WHERE p.mobile=? AND p.status='won' AND p.code IS NOT NULL",
+            (mobile,)))
+        with db.LOCK, db.transaction(conn):
+            view = wallet.view(conn, wallet.ensure(conn, mobile))
+    active = sorted((r for r in rows if (r["valid_until"] or "") >= now), key=lambda r: r["valid_until"])
+    expired = sorted((r for r in rows if (r["valid_until"] or "") < now), key=lambda r: r["valid_until"] or "",
+                     reverse=True)
+    for r in active:
+        r["expired"] = False
+    for r in expired:
+        r["expired"] = True
+    return {"codes": active + expired, "wallet": view, "shop_url": config.SHOP_URL,
+            "test_mode": discount.mode() == "mock"}
 
 
 @app.post("/api/games/{slug}/play")
