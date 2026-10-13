@@ -2,8 +2,8 @@
 (function () {
   const { fa, money, jalaliDate, api, el, copy } = window.ZG;
   const root = document.getElementById("root");
-  const KIND = { wheel: "گردونه شانس", scratch: "کارت خراشی", quiz: "چالش کلمه" };
-  const ICON = { wheel: "🎡", scratch: "🎟️", quiz: "🔤" };
+  const KIND = { wheel: "گردونه شانس", scratch: "کارت خراشی", chest: "صندوق شانس", slot: "ماشین شانس", quiz: "چالش کلمه", wordle: "کلمه‌ی مخفی" };
+  const ICON = { wheel: "🎡", scratch: "🎟️", chest: "🎁", slot: "🎰", quiz: "🔤", wordle: "🧩" };
   const PRIZE_KIND = { percentage: "درصدی", amount: "مبلغی (ریال)", none: "بدون جایزه" };
   const STATUS = {
     won: ["برنده", "ok"], lost: ["بدون جایزه", "off"], need_signup: ["ثبت‌نام نکرده", "warn"],
@@ -200,6 +200,8 @@
     let game;
     try { game = await api(`/api/admin/games/${id}`); } catch (e) { return fail("#/games", e); }
     const isQuiz = game.kind === "quiz";
+    const isWordle = game.kind === "wordle";
+    const isScored = isQuiz || isWordle;    // prize by score (min_score) instead of chance weights
     const url = `${location.origin}/g/${game.slug}`;
 
     const f = {};
@@ -256,14 +258,14 @@
           el("td", {}, none ? "—" : rialField(p, "amount", p.kind === "amount")),
           el("td", {}, none ? "—" : rialField(p, "max_amount", true)),
           el("td", {}, none ? "—" : bind("usage_count", el("input", { type: "number", min: 1, value: p.usage_count, style: "width:70px" }), n)),
-          isQuiz
+          isScored
             ? el("td", {}, bind("min_score", el("input", { type: "number", min: 0, value: p.min_score, style: "width:70px" }), n))
             : el("td", {}, bind("weight", el("input", { type: "number", min: 0, value: p.weight, style: "width:80px" }), n)),
-          isQuiz ? "" : chance,
+          isScored ? "" : chance,
           el("td", {}, none ? "—" : bind("stock", el("input", { type: "number", min: 0, value: p.stock ?? "", placeholder: "نامحدود", style: "width:90px" }),
             (v) => (v === "" ? null : Number(v)))),
           el("td", { class: "small muted" }, none ? "—" : fa(p.given || 0)),
-          isQuiz ? "" : el("td", {}, bind("color", el("input", { type: "color", value: p.color || "#f26600" }))),
+          isScored ? "" : el("td", {}, bind("color", el("input", { type: "color", value: p.color || "#f26600" }))),
           el("td", {}, bind("active", el("input", { type: "checkbox", checked: !!p.active }))),
           el("td", {}, el("button", { type: "button", class: "btn ghost", title: "حذف", onclick: () => { prizes.splice(i, 1); renderPrizes(); } }, "✕")));
       }));
@@ -278,15 +280,17 @@
     renderPrizes();
 
     const prizeHead = ["متن جایزه", "نوع", "مقدار", "سقف تخفیف (ریال)", "دفعات استفاده",
-      isQuiz ? "حداقل جواب درست" : "وزن شانس", isQuiz ? "" : "احتمال", "موجودی", "داده‌شده", isQuiz ? "" : "رنگ", "فعال", ""]
-      .filter((h, i) => !(isQuiz && (i === 6 || i === 9)));
+      isWordle ? "حداقل امتیاز" : isQuiz ? "حداقل جواب درست" : "وزن شانس", isScored ? "" : "احتمال", "موجودی", "داده‌شده", isScored ? "" : "رنگ", "فعال", ""]
+      .filter((h, i) => !(isScored && (i === 6 || i === 9)));
 
     let questionsBox = "";
-    if (isQuiz) {
+    if (isScored) {
       const lines = game.questions.filter((q) => q.active).map((q) => [q.word, q.answer, ...q.wrong].join(" | ")).join("\n");
       f.questions = el("textarea", { class: "ltr", style: "min-height:260px;direction:rtl" }, lines);
       questionsBox = el("div", { class: "card" }, el("h2", {}, "کلمه‌ها"),
-        el("p", { class: "muted small" }, "هر خط یک کلمه: «کلمه | معنی درست | گزینه‌ی غلط ۱ | گزینه‌ی غلط ۲ | گزینه‌ی غلط ۳». هر بار بازی، از بین این‌ها به‌صورت تصادفی انتخاب می‌شود."),
+        el("p", { class: "muted small" }, isWordle
+          ? "هر خط یک کلمه: «کلمه‌ی انگلیسی ۴ تا ۶ حرفی | معنی فارسی». هر بار بازی یکی به‌صورت تصادفی انتخاب می‌شود و معنی‌اش به‌عنوان راهنما نشان داده می‌شود."
+          : "هر خط یک کلمه: «کلمه | معنی درست | گزینه‌ی غلط ۱ | گزینه‌ی غلط ۲ | گزینه‌ی غلط ۳». هر بار بازی، از بین این‌ها به‌صورت تصادفی انتخاب می‌شود."),
         f.questions,
         el("p", { class: "muted small" }, `${fa(game.questions.filter((q) => q.active).length)} کلمه‌ی فعال`));
     }
@@ -318,12 +322,15 @@
           isQuiz ? el("label", { class: "f" }, el("span", {}, "تعداد کلمه در هر بازی"), f.question_count) : "",
           isQuiz ? el("label", { class: "f" }, el("span", {}, "زمان (ثانیه)"), f.time_limit) : "")),
       el("div", { class: "card" },
-        el("div", { class: "row between" }, el("h2", {}, isQuiz ? "جایزه‌ها بر اساس جواب درست" : (game.kind === "wheel" ? "خانه‌های گردونه" : "جایزه‌های کارت")),
+        el("div", { class: "row between" }, el("h2", {}, isQuiz ? "جایزه‌ها بر اساس جواب درست" : isWordle ? "جایزه‌ها بر اساس تعداد حدس"
+          : ({ wheel: "خانه‌های گردونه", slot: "نمادهای ماشین شانس", chest: "جایزه‌های صندوق" }[game.kind] || "جایزه‌های کارت")),
           el("button", { type: "button", class: "btn light", onclick: () => {
             prizes.push({ label: "جایزه‌ی تازه", kind: "percentage", amount: 10, max_amount: 0, usage_count: 1, weight: 1, stock: null, min_score: 0, color: "", active: 1, given: 0 });
             renderPrizes();
           } }, "+ جایزه")),
-        el("p", { class: "muted small" }, isQuiz
+        el("p", { class: "muted small" }, isWordle
+          ? "امتیاز = ۷ منهای تعداد حدس‌ها (۱ حدس = ۶، ۶ حدس = ۱، پیدا نکردن = ۰). بازیکن بهترین جایزه‌ای را می‌گیرد که امتیازش به آن برسد. مبلغ‌ها به ریال است."
+          : isQuiz
           ? "بازیکن بهترین جایزه‌ای را می‌گیرد که «حداقل جواب درست» آن را آورده باشد. یک ردیف «بدون جایزه» با حداقل ۰ بگذارید. مبلغ‌ها به ریال است."
           : "شانس هر جایزه = وزن آن ÷ جمع وزن‌ها. وقتی موجودی جایزه‌ای تمام شود، دیگر نمی‌افتد. مبلغ‌ها و سقف تخفیف به ریال است."),
         el("div", { class: "table-wrap" }, el("table", {}, el("thead", {}, el("tr", {}, prizeHead.map((h) => el("th", {}, h)))), prizeRows))),
@@ -348,16 +355,18 @@
       if (isQuiz) {
         body.settings.question_count = Number(f.question_count.value) || 5;
         body.settings.time_limit = Number(f.time_limit.value) || 60;
+      }
+      if (isScored) {
         const byWord = new Map(game.questions.map((q) => [q.word, q.id]));
         const bad = [];
         body.questions = f.questions.value.split("\n").map((line, i) => [line.split("|").map((s) => s.trim()).filter(Boolean), i])
           .filter(([parts]) => parts.length)
           .map(([parts, i]) => {
-            if (parts.length < 3) bad.push(fa(i + 1));
+            if (parts.length < (isWordle ? 2 : 3)) bad.push(fa(i + 1));
             return { id: byWord.get(parts[0]), word: parts[0], answer: parts[1] || "", wrong: parts.slice(2, 5), active: true };
           });
         if (bad.length) {
-          msg.replaceChildren(el("span", { class: "msg bad" }, `خط ${bad.join("، ")} کلمه‌ها کامل نیست (حداقل کلمه، معنی و یک گزینه‌ی غلط).`));
+          msg.replaceChildren(el("span", { class: "msg bad" }, `خط ${bad.join("، ")} کلمه‌ها کامل نیست (${isWordle ? "کلمه و معنی" : "حداقل کلمه، معنی و یک گزینه‌ی غلط"}).`));
           return;
         }
       }

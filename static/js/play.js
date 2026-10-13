@@ -1,6 +1,7 @@
 // Game page: /g/<slug>. Loads the game, asks for the mobile number, plays, shows the code.
 (function () {
   const { fa, jalaliDate, api, el, store, copy } = window.ZG;
+  const sfx = window.ZG.sfx;
   const slug = decodeURIComponent(location.pathname.split("/").filter(Boolean).pop() || "");
   const app = document.getElementById("app");
   const storeKey = `zg:last:${slug}`;
@@ -18,7 +19,7 @@
     }
     document.title = info.title;
     if (info.color) document.documentElement.style.setProperty("--brand", info.color);
-    document.getElementById("eyebrow").textContent = { wheel: "گردونه شانس", scratch: "کارت خراشی", quiz: "چالش کلمه" }[info.kind] || "";
+    document.getElementById("eyebrow").textContent = { wheel: "گردونه شانس", scratch: "کارت خراشی", quiz: "چالش کلمه", chest: "صندوق شانس", slot: "ماشین شانس", wordle: "کلمه‌ی مخفی" }[info.kind] || "";
     document.getElementById("title").textContent = info.title;
     document.getElementById("subtitle").textContent = info.subtitle || "";
     document.getElementById("rules").textContent = info.rules || "";
@@ -26,7 +27,8 @@
       app.replaceChildren(el("div", { class: "closed" }, info.message));
       return;
     }
-    ({ wheel: renderWheel, scratch: renderScratch, quiz: renderQuiz })[info.kind]();
+    ({ wheel: renderWheel, scratch: renderScratch, quiz: renderQuiz, chest: renderChest, slot: renderSlot,
+       wordle: renderWordle })[info.kind]();
     if (info.test_mode) {
       app.before(el("p", { class: "notice" },
         "حالت آزمایشی: کدهای تخفیف این صفحه ساختگی‌اند (با T شروع می‌شوند) و در زبانیاد کار نمی‌کنند."));
@@ -196,6 +198,23 @@
     return lum > 0.62 ? "#572401" : "#ffffff";
   }
 
+  // a tick each time a slice edge passes the pointer, read from the live CSS rotation
+  function tickWhileSpinning(svg, seg, ms) {
+    const until = performance.now() + ms;
+    let last = null;
+    (function frame(now) {
+      const m = getComputedStyle(svg).transform;
+      if (m && m !== "none") {
+        const [a, b] = m.slice(7, -1).split(",").map(Number);
+        const deg = (Math.atan2(b, a) * 180 / Math.PI + 360) % 360;
+        const slot = Math.floor(deg / seg);
+        if (last !== null && slot !== last) sfx.tick();
+        last = slot;
+      }
+      if (now < until) requestAnimationFrame(frame);
+    })(performance.now());
+  }
+
   function renderWheel() {
     const slices = info.slices;
     const n = slices.length;
@@ -261,6 +280,8 @@
       svg.style.transform = `rotate(${rotation}deg)`;
       button.textContent = "در حال چرخش…";
       const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+      sfx.spin();
+      tickWhileSpinning(svg, seg, reduced ? 1100 : 5300);
       setTimeout(() => {
         remember(res, mobile);
         showResult({ ...res, mobile });
@@ -324,6 +345,7 @@
       ctx.moveTo(...from);
       ctx.lineTo(...to);
       ctx.stroke();
+      if (moves % 3 === 0) sfx.scratch();
       if (++moves % 8 === 0) checkCleared();
     }
     function checkCleared() {
@@ -409,10 +431,12 @@
     app.replaceChildren(head, el("div", { class: "progress" }, bar),
       el("p", { class: "q-label" }, "معنی این کلمه چیه؟"), word, options);
 
+    let lastBeep = null;
     function updClock() {
       const left = Math.max(0, Math.ceil((deadline - Date.now()) / 1000));
       clock.textContent = `${String(Math.floor(left / 60)).padStart(2, "0")}:${String(left % 60).padStart(2, "0")}`;
       clock.classList.toggle("timer-low", left <= 10);
+      if (left <= 5 && left > 0 && left !== lastBeep) { lastBeep = left; sfx.countdown(); }
       if (left <= 0) finish();
     }
     const tick = setInterval(updClock, 250);
@@ -428,6 +452,7 @@
         onclick: (e) => {
           if (finished) return;
           answers[q.id] = o;
+          sfx.tap();
           e.currentTarget.classList.add("picked");
           options.querySelectorAll("button").forEach((b) => (b.disabled = true));
           setTimeout(() => (++index < run.questions.length ? show() : finish()), 220);
@@ -456,10 +481,252 @@
     show();
   }
 
+  // ------------------------------------------------------------ chest: pick one of three
+
+  function renderChest() {
+    const chests = el("div", { class: "chests" });
+    const hint = el("p", { class: "scratch-hint" }, "شماره‌ات رو بنویس و یکی از صندوق‌ها رو انتخاب کن.");
+    const input = mobileField("mobile");
+    const box = errorBox();
+    let busy = false;
+    const items = [0, 1, 2].map((i) => {
+      const c = el("button", { class: "chest", type: "button", "aria-label": `صندوق ${fa(i + 1)}` },
+        el("span", { class: "chest-lid" }), el("span", { class: "chest-body" }), el("span", { class: "chest-lock" }),
+        el("span", { class: "chest-prize" }));
+      c.addEventListener("click", () => pick(i));
+      return c;
+    });
+    chests.append(...items);
+    app.replaceChildren(chests, hint, input, box, pastResult() || "");
+
+    async function pick(i) {
+      if (busy) return;
+      busy = true;
+      sfx.tap();
+      const got = await start(input.querySelector("input"), box, chests, `/api/games/${slug}/play`);
+      if (!got) { busy = false; return; }
+      const { res, mobile } = got;
+      const chosen = items[i];
+      chosen.classList.add("shake");
+      setTimeout(() => {
+        chosen.classList.remove("shake");
+        chosen.classList.add("open", "chosen");
+        chosen.querySelector(".chest-prize").textContent = shortLabel(res.prize_label);
+        sfx.open();
+      }, 700);
+      // show what the other boxes held (for fun only; the result was decided by the server)
+      const others = info.slices.map((s) => shortLabel(s.label)).filter((l) => l !== shortLabel(res.prize_label));
+      setTimeout(() => items.forEach((c, j) => {
+        if (j === i) return;
+        c.classList.add("open", "dim");
+        c.querySelector(".chest-prize").textContent = others[(Math.random() * others.length) | 0] || "۱۰٪";
+      }), 1500);
+      setTimeout(() => {
+        remember(res, mobile);
+        showResult({ ...res, mobile });
+        busy = false;
+        setTimeout(() => items.forEach((c) => { c.className = "chest"; c.querySelector(".chest-prize").textContent = ""; }), 400);
+      }, 2600);
+    }
+  }
+
+  function shortLabel(label) {
+    return String(label || "").split(" ")[0];
+  }
+
+  // ------------------------------------------------------------ slot machine: three reels land on the prize
+
+  function renderSlot() {
+    const symbols = info.slices.map((s) => ({ text: shortLabel(s.label), color: s.color || "#f26600" }));
+    const N = symbols.length;
+    const ROW = 84;
+    const reels = [0, 1, 2].map((r) => {
+      const strip = el("div", { class: "strip" });
+      for (let k = 0; k < 14; k++) {
+        symbols.forEach((sym) => strip.append(el("div", { class: "sym", style: `--c:${sym.color}` }, sym.text)));
+      }
+      const start = (Math.random() * N) | 0;
+      strip.style.transform = `translateY(${-start * ROW}px)`;
+      strip.dataset.pos = start;
+      return { reel: el("div", { class: "reel" }, strip), strip };
+    });
+    const machine = el("div", { class: "slot-machine" },
+      el("div", { class: "slot-top" }, "🎰 ماشین شانس زبانیاد"),
+      el("div", { class: "reels" }, reels.map((r) => r.reel)),
+      el("div", { class: "slot-line" }));
+    const input = mobileField("mobile");
+    const box = errorBox();
+    const button = el("button", { class: "btn", type: "button" }, "اهرم رو بکش! 🎰");
+    app.replaceChildren(machine, input, button, box, pastResult() || "");
+
+    button.addEventListener("click", async () => {
+      sfx.lever();
+      const got = await start(input.querySelector("input"), box, button, `/api/games/${slug}/play`);
+      if (!got) return;
+      const { res, mobile } = got;
+      button.textContent = "در حال چرخش…";
+      const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+      const ticker = setInterval(() => sfx.reel(), 90);
+      const stops = reels.map((r, i) => {
+        const dur = reduced ? 0.6 + i * 0.2 : 1.4 + i * 0.6;
+        const target = N * (6 + i * 2) + res.prize_index;
+        r.strip.style.transition = `transform ${dur}s cubic-bezier(.15,.75,.2,1)`;
+        r.strip.style.transform = `translateY(${-target * ROW}px)`;
+        return new Promise((ok) => setTimeout(() => {
+          sfx.stop();
+          r.strip.style.transition = "none";   // jump back to the same symbol near the top for the next spin
+          r.strip.style.transform = `translateY(${-res.prize_index * ROW}px)`;
+          ok();
+        }, dur * 1000));
+      });
+      await Promise.all(stops);
+      clearInterval(ticker);
+      machine.classList.add("win");
+      setTimeout(() => {
+        machine.classList.remove("win");
+        remember(res, mobile);
+        showResult({ ...res, mobile });
+        button.textContent = "اهرم رو بکش! 🎰";
+        button.disabled = false;
+      }, 700);
+    });
+  }
+
+  // ------------------------------------------------------------ hidden word: find the English word for a Persian meaning
+
+  function renderWordle() {
+    const ladder = el("div", { class: "ladder" },
+      [...info.ladder].sort((a, b) => b.min_score - a.min_score).map((l) =>
+        el("div", {}, el("span", {}, l.min_score > 0 ? `${fa(7 - l.min_score)} حدس یا کمتر` : "حتی اگه پیدا نکنی"),
+          el("b", {}, l.label))));
+    const input = mobileField("mobile");
+    const box = errorBox();
+    const button = el("button", { class: "btn", type: "button" }, "شروع بازی");
+    const intro = el("p", { style: "margin:0;color:var(--dark-3)" },
+      `معنی فارسی یک کلمه رو نشونت می‌دیم؛ کلمه‌ی انگلیسیش رو در ${fa(info.max_guesses)} حدس پیدا کن. سبز یعنی حرف درست سر جای درست، زرد یعنی این حرف هست ولی جای دیگه.`);
+    app.replaceChildren(intro, ladder, input, button, box, pastResult() || "");
+    button.addEventListener("click", async () => {
+      sfx.tap();
+      const got = await start(input.querySelector("input"), box, button, `/api/games/${slug}/wordle/start`);
+      if (!got) return;
+      if (wallet && typeof got.res.chances === "number") showWallet({ chances: got.res.chances });
+      runWordle(got.res, got.mobile);
+    });
+  }
+
+  function runWordle(run, mobile) {
+    const L = run.length;
+    let row = 0, current = "", busy = false, over = false;
+    const tiles = [];
+    const grid = el("div", { class: "wgrid", style: `--cols:${L}` });
+    for (let r = 0; r < run.max_guesses; r++) {
+      tiles.push([]);
+      for (let c = 0; c < L; c++) {
+        const t = el("div", { class: "wtile" });
+        tiles[r].push(t);
+        grid.append(t);
+      }
+    }
+    const keys = {};
+    const kb = el("div", { class: "wkeys" }, ["qwertyuiop", "asdfghjkl", "zxcvbnm"].map((line, i) =>
+      el("div", { class: "wrow" },
+        i === 2 ? el("button", { type: "button", class: "wkey wide", onclick: submit }, "تأیید") : "",
+        [...line].map((ch) => (keys[ch] = el("button", { type: "button", class: "wkey", onclick: () => type(ch) }, ch.toUpperCase()))),
+        i === 2 ? el("button", { type: "button", class: "wkey wide", onclick: back, "aria-label": "پاک کردن" }, "⌫") : "")));
+    const msg = el("p", { class: "whint-msg" });
+    app.replaceChildren(
+      el("div", { class: "whint" }, el("span", {}, "معنی این کلمه:"), el("b", {}, run.hint),
+        el("small", {}, `${fa(L)} حرف · ${fa(run.max_guesses)} حدس`)),
+      grid, msg, kb);
+
+    const onKey = (e) => {
+      if (over || e.ctrlKey || e.metaKey || e.altKey) return;
+      if (e.key === "Enter") submit();
+      else if (e.key === "Backspace") back();
+      else if (/^[a-zA-Z]$/.test(e.key)) type(e.key.toLowerCase());
+    };
+    document.addEventListener("keydown", onKey);
+
+    function paint() {
+      tiles[row].forEach((t, i) => { t.textContent = (current[i] || "").toUpperCase(); t.classList.toggle("filled", !!current[i]); });
+    }
+    function type(ch) {
+      if (busy || over || current.length >= L) return;
+      current += ch;
+      sfx.key();
+      paint();
+    }
+    function back() {
+      if (busy || over) return;
+      current = current.slice(0, -1);
+      paint();
+    }
+    async function submit() {
+      if (busy || over) return;
+      if (current.length < L) {
+        msg.textContent = `کلمه باید ${fa(L)} حرف باشه.`;
+        sfx.bad();
+        grid.classList.add("nudge");
+        setTimeout(() => grid.classList.remove("nudge"), 400);
+        return;
+      }
+      busy = true;
+      msg.textContent = "";
+      let res;
+      try {
+        res = await api(`/api/games/${slug}/wordle/guess`, { method: "POST", body: { token: run.token, guess: current } });
+      } catch (e) {
+        msg.textContent = e.message;
+        busy = false;
+        return;
+      }
+      const order = { absent: 0, present: 1, correct: 2 };
+      res.feedback.forEach((f, i) => setTimeout(() => {
+        tiles[row][i].classList.add("flip", f);
+        sfx.flip();
+        const k = keys[current[i]];
+        if (k && (order[f] > (order[k.dataset.state] ?? -1))) { k.dataset.state = f; k.className = `wkey ${f}`; }
+      }, i * 220));
+      const settle = L * 220 + 250;
+      setTimeout(() => {
+        if (res.done) {
+          over = true;
+          document.removeEventListener("keydown", onKey);
+          if (res.solved) sfx.good();
+          remember(res, mobile);
+          setTimeout(() => {
+            showResult({ ...res, mobile });
+            renderWordle();
+          }, res.solved ? 600 : 300);
+        } else {
+          row += 1;
+          current = "";
+          busy = false;
+          msg.textContent = `${fa(info.max_guesses - row)} حدس دیگه داری.`;
+        }
+      }, settle);
+    }
+  }
+
   // ------------------------------------------------------------ result
+
+  function percentOf(label) {
+    const m = String(label || "").replace(/[۰-۹]/g, (d) => "۰۱۲۳۴۵۶۷۸۹".indexOf(d)).match(/\d+/);
+    return m ? Number(m[0]) : 0;
+  }
+
+  function scorePill(res) {
+    if (res.answer) {  // hidden word
+      return el("div", {},
+        el("div", { class: "pill" }, res.solved ? `پیدا شد در ${fa(res.guesses)} حدس` : "این بار پیدا نشد"),
+        el("p", { class: "muted" }, "کلمه: ", el("b", { class: "latin" }, res.answer.toUpperCase()), ` (${res.meaning})`));
+    }
+    return res.total ? el("div", { class: "pill" }, "امتیاز:", el("span", {}, `${fa(res.score)}/${fa(res.total)}`)) : "";
+  }
 
   function showResult(res) {
     const close = () => overlay.remove();
+    if (res.result !== "won") sfx.meh();
     const body = [];
     if (res.result === "won") {
       const copyBtn = el("button", { type: "button" }, "کپی");
@@ -467,20 +734,21 @@
         copyBtn.textContent = (await copy(res.code)) ? "کپی شد ✓" : "کپی نشد";
       });
       body.push(
-        el("div", { class: "big" }, "🎁"),
-        el("h2", {}, `تبریک، ${res.prize_label} بردی!`),
-        res.total ? el("div", { class: "pill" }, "امتیاز:", el("span", {}, `${fa(res.score)}/${fa(res.total)}`)) : "",
+        el("div", { class: "big" }, percentOf(res.prize_label) >= 90 ? "🏆" : "🎁"),
+        el("h2", {}, res.answer && !res.solved ? `پیدا نشد، ولی ${res.prize_label} بردی!` : `تبریک، ${res.prize_label} بردی!`),
+        scorePill(res),
         el("div", { class: "code-box" }, el("b", {}, res.code), copyBtn),
         info.test_mode ? el("p", { class: "notice" }, "این کد آزمایشی است و در زبانیاد کار نمی‌کند.") : "",
         el("p", { class: "muted" }, `این کد روی شماره‌ی ${fa(res.mobile || "")} فعال شده و تا ${jalaliDate(res.valid_until)} اعتبار دارد.`),
-        el("a", { class: "btn", href: info.shop_url, target: "_blank", rel: "noopener" }, "استفاده از کد در زبانیاد"),
+        el("a", { class: "btn", href: info.shop_url, target: "_blank", rel: "noopener" }, "وارد کردن کد در زبانیاد"),
       );
       confetti();
+      sfx.win(percentOf(res.prize_label) >= 40);
     } else {
       body.push(
         el("div", { class: "big" }, res.late ? "⏰" : "🙂"),
         el("h2", {}, res.late ? "وقت تمام شد!" : (res.prize_label || "این بار نشد!")),
-        res.total ? el("div", { class: "pill" }, "امتیاز:", el("span", {}, `${fa(res.score)}/${fa(res.total)}`)) : "",
+        scorePill(res),
         el("p", { class: "muted" }, "ممنون که بازی کردی. حتماً به زبانیاد سر بزن!"),
         el("a", { class: "btn", href: info.shop_url, target: "_blank", rel: "noopener" }, "رفتن به زبانیاد"),
       );

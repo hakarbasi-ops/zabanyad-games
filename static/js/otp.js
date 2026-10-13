@@ -76,6 +76,7 @@
         try {
           const r = await api("/api/otp/verify", { method: "POST", body: { mobile, code: value, ref: store.get("zg:ref") } });
           store.set("zg:otp", { mobile, token: r.token, until: Date.now() + r.valid_minutes * 60000 });
+          renderHeader();
           if (r.wallet && onWallet) onWallet(r.wallet);
           finish(r.token);
         } catch (e) {
@@ -103,7 +104,36 @@
     });
   }
 
+  // header: who is signed in + a small «خروج», and the sound on/off switch
+  function renderHeader() {
+    const bar = document.querySelector(".appbar-inner");
+    if (!bar) return;
+    bar.querySelectorAll(".acct, .mute").forEach((n) => n.remove());
+    const s = session();
+    const header = bar.closest(".appbar");
+    header.classList.toggle("signed-in", !!s);
+    if (s) {
+      bar.append(el("span", { class: "acct" },
+        el("span", { class: "acct-mobile" }, fa(s.mobile)),
+        el("button", { type: "button", class: "acct-out", onclick: () => { signOut(); location.reload(); } }, "خروج")));
+    }
+    if (window.ZG.sfx) {
+      const btn = el("button", { type: "button", class: "mute", "aria-label": "صدا" });
+      const paint = () => { btn.textContent = ZG.sfx.isMuted() ? "🔇" : "🔊"; };
+      btn.addEventListener("click", () => { ZG.sfx.setMuted(!ZG.sfx.isMuted()); paint(); });
+      paint();
+      bar.append(btn);
+    }
+  }
+
+  function signOut() {
+    store.set("zg:otp", null);
+  }
+
   window.ZG.verifyMobile = verifyMobile;
   window.ZG.session = session;
-  window.ZG.signOut = () => store.set("zg:otp", null);
+  window.ZG.signOut = () => { signOut(); renderHeader(); };
+  window.ZG.renderHeader = renderHeader;
+  if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", renderHeader);
+  else renderHeader();
 })();

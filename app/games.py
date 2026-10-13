@@ -13,6 +13,10 @@ from .util import code_validity, local_day_start_utc, local_now, now_iso, parse_
 
 RNG = random.SystemRandom()
 QUIZ_GRACE_SECONDS = 10
+CHANCE_KINDS = ("wheel", "scratch", "chest", "slot")   # result drawn by weight
+SCORED_KINDS = ("quiz", "wordle")                       # result from the player's score (prize.min_score)
+WORDLE_MAX_GUESSES = 6
+WORDLE_MINUTES = 10
 
 
 # ---------------------------------------------------------------- loading
@@ -58,9 +62,12 @@ def public_view(conn, game: dict) -> dict:
         "color": game["settings"].get("color", ""),
         "ends_at": game["ends_at"],
     }
+    if game["kind"] == "wordle":
+        view["max_guesses"] = WORDLE_MAX_GUESSES
     if game["kind"] == "quiz":
         view["question_count"] = quiz_count(conn, game)
         view["time_limit"] = int(game["settings"].get("time_limit", 60))
+    if game["kind"] in SCORED_KINDS:
         view["ladder"] = [{"label": p["label"], "min_score": p["min_score"], "win": p["kind"] != "none"}
                           for p in sorted(prizes, key=lambda p: p["min_score"])]
     else:
@@ -172,7 +179,7 @@ def _new_play(conn, game: dict, mobile: str, ip: str, prize: dict | None, status
 
 def play_chance(conn, slug: str, mobile: str, ip: str) -> dict:
     game = get_game(conn, slug)
-    if game["kind"] not in ("wheel", "scratch"):
+    if game["kind"] not in CHANCE_KINDS:
         raise PlayError("bad_game", "این بازی از این راه بازی نمی‌شود.")
     prizes = prizes_of(conn, game["id"])
     with db.LOCK, db.transaction(conn):
@@ -244,6 +251,11 @@ def quiz_finish(conn, slug: str, token: str, answers: dict) -> dict:
         1 for qid in qids if qid in by_id and str(answers.get(str(qid), "")).strip() == by_id[qid]["answer"]
     )
 
+    return _finish_scored(conn, game, play, score, {"late": late})
+
+
+def _finish_scored(conn, game: dict, play: dict, score: int, extra: dict) -> dict:
+    """Gives the best prize the score reaches (quiz, wordle) and issues its code."""
     prizes = prizes_of(conn, game["id"])
     with db.LOCK, db.transaction(conn):
         # re-check inside the lock: two finishes for the same token must not both pass
@@ -261,11 +273,85 @@ def quiz_finish(conn, slug: str, token: str, answers: dict) -> dict:
         if not prize:
             conn.execute("UPDATE plays SET status='lost', finished_at=? WHERE id=?", (now_iso(), play["id"]))
 
-    result = {"score": score, "total": play["total"], "late": late}
+    result = {"score": score, "total": play["total"], **extra}
     if not prize:
         return {**result, "result": "lost", "prize_label": "", "chances": wallet.chances(conn, play["mobile"])}
     outcome = _issue(conn, game, play["id"], prize, play["mobile"])
     return {**result, **outcome, "prize_label": prize["label"], "chances": wallet.chances(conn, play["mobile"])}
+
+
+# ---------------------------------------------------------------- hidden word (Wordle-style, with the Persian meaning as hint)
+
+
+def _wordle_words(conn, game_id: int) -> list[dict]:
+    return [q for q in quiz_questions(conn, game_id) if q["word"].isascii() and q["word"].isalpha()
+            and 4 <= len(q["word"]) <= 6]
+
+
+def wordle_start(conn, slug: str, mobile: str, ip: str) -> dict:
+    game = get_game(conn, slug)
+    if game["kind"] != "wordle":
+        raise PlayError("bad_game", "این بازی کلمه‌ی مخفی نیست.")
+    words = _wordle_words(conn, game["id"])
+    if not words:
+        raise PlayError("no_questions", "هنوز کلمه‌ای برای این بازی ثبت نشده.", 409)
+    q = RNG.choice(words)
+    token = secrets.token_urlsafe(24)
+    with db.LOCK, db.transaction(conn):
+        _check_limits(conn, game, mobile, ip)
+        wallet.spend(conn, mobile)
+        _new_play(conn, game, mobile, ip, None, token=token, total=WORDLE_MAX_GUESSES,
+                  data={"qid": q["id"], "guesses": []})
+    return {"token": token, "length": len(q["word"]), "hint": q["answer"], "max_guesses": WORDLE_MAX_GUESSES,
+            "chances": wallet.chances(conn, mobile)}
+
+
+def wordle_feedback(word: str, guess: str) -> list[str]:
+    """Per letter: 'correct' (right place), 'present' (elsewhere in the word), 'absent'; repeats counted properly."""
+    result = ["absent"] * len(guess)
+    left: dict[str, int] = {}
+    for i, (w, g) in enumerate(zip(word, guess)):
+        if w == g:
+            result[i] = "correct"
+        else:
+            left[w] = left.get(w, 0) + 1
+    for i, g in enumerate(guess):
+        if result[i] != "correct" and left.get(g, 0) > 0:
+            result[i] = "present"
+            left[g] -= 1
+    return result
+
+
+def wordle_guess(conn, slug: str, token: str, guess: str) -> dict:
+    game = get_game(conn, slug)
+    play = db.row(conn.execute("SELECT * FROM plays WHERE token=? AND game_id=?", (token, game["id"])).fetchone())
+    if not play:
+        raise PlayError("bad_token", "این دست بازی پیدا نشد. صفحه را دوباره باز کنید.", 404)
+    if play["status"] != "pending":
+        raise PlayError("finished", "این دست قبلاً تمام شده.", 409)
+    q = db.row(conn.execute("SELECT * FROM questions WHERE id=?", (play["data"]["qid"],)).fetchone())
+    word = q["word"].lower()
+    guess = (guess or "").strip().lower()
+    if len(guess) != len(word) or not guess.isascii() or not guess.isalpha():
+        raise PlayError("bad_guess", f"یک کلمه‌ی {len(word)} حرفی انگلیسی بنویسید.")
+
+    late = (utcnow() - datetime.fromisoformat(play["created_at"])).total_seconds() > WORDLE_MINUTES * 60
+    with db.LOCK, db.transaction(conn):
+        fresh = db.row(conn.execute("SELECT status, data FROM plays WHERE id=?", (play["id"],)).fetchone())
+        if fresh["status"] != "pending":
+            raise PlayError("finished", "این دست قبلاً تمام شده.", 409)
+        guesses = fresh["data"]["guesses"] + ([] if late else [guess])
+        conn.execute("UPDATE plays SET data=? WHERE id=?",
+                     (json.dumps({**fresh["data"], "guesses": guesses}), play["id"]))
+    feedback = wordle_feedback(word, guess)
+    solved = not late and guess == word
+    if not (solved or late or len(guesses) >= WORDLE_MAX_GUESSES):
+        return {"feedback": feedback, "done": False, "guesses": len(guesses)}
+    # solved in n guesses → score 7-n (1 guess = 6 … 6 guesses = 1); not solved → 0
+    score = WORDLE_MAX_GUESSES + 1 - len(guesses) if solved else 0
+    out = _finish_scored(conn, game, play, score,
+                         {"late": late, "solved": solved, "guesses": len(guesses), "answer": word, "meaning": q["answer"]})
+    return {"feedback": feedback, "done": True, **out}
 
 
 def expire_stale(conn) -> None:

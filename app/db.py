@@ -152,6 +152,8 @@ def init() -> None:
         conn.executescript(SCHEMA)
         if not conn.execute("SELECT 1 FROM games LIMIT 1").fetchone():
             seed(conn)
+        else:
+            add_missing_games(conn)
         apply_prize_plan(conn)
 
 
@@ -217,11 +219,49 @@ SEED_GAMES = [
             ("forget", "فراموش کردن", ["به یاد آوردن", "بخشیدن", "پیدا کردن"]),
         ],
     },
+    {
+        "slug": "chest",
+        "kind": "chest",
+        "title": "صندوق شانس زبانیاد",
+        "subtitle": "یکی از سه صندوق رو باز کن و جایزه‌ت رو ببین!",
+        "rules": "هر صندوق یک شانس مصرف می‌کند. همه برنده‌اند: از ۱۰٪ تا ۹۰٪ تخفیف!",
+    },
+    {
+        "slug": "slot",
+        "kind": "slot",
+        "title": "ماشین شانس زبانیاد",
+        "subtitle": "اهرم رو بکش؛ سه تا مثل هم بیاد، همون تخفیف مال توئه!",
+        "rules": "هر بار کشیدن اهرم یک شانس مصرف می‌کند. همه برنده‌اند: از ۱۰٪ تا ۹۰٪ تخفیف!",
+    },
+    {
+        "slug": "hidden-word",
+        "kind": "wordle",
+        "title": "کلمه‌ی مخفی زبانیاد",
+        "subtitle": "معنی فارسی رو داری؛ کلمه‌ی انگلیسیش رو در ۶ حدس پیدا کن!",
+        "rules": "یک شانس، ۶ حدس. هر حرف سبز یعنی جای درست، زرد یعنی در کلمه هست ولی جای دیگر. "
+                 "در ۱ تا ۲ حدس ۵۰٪، ۳ حدس ۴۰٪، ۴ حدس ۳۰٪، ۵ حدس ۲۰٪، و در هر صورت حداقل ۱۰٪ تخفیف.",
+        "questions": [
+            ("apple", "سیب", []), ("house", "خانه", []), ("water", "آب", []), ("happy", "خوشحال", []),
+            ("green", "سبز", []), ("money", "پول", []), ("bread", "نان", []), ("chair", "صندلی", []),
+            ("music", "موسیقی", []), ("river", "رودخانه", []), ("smile", "لبخند", []), ("train", "قطار", []),
+            ("beach", "ساحل", []), ("dream", "رویا", []), ("heart", "قلب", []), ("light", "نور", []),
+            ("cloud", "ابر", []), ("plant", "گیاه", []), ("sleep", "خواب", []), ("world", "دنیا", []),
+            ("learn", "یاد گرفتن", []), ("story", "داستان", []), ("voice", "صدا", []), ("phone", "تلفن", []),
+            ("table", "میز", []), ("horse", "اسب", []), ("sweet", "شیرین", []), ("laugh", "خندیدن", []),
+            ("night", "شب", []), ("friend", "دوست", []),
+        ],
+    },
 ]
 
 
-def seed(conn: sqlite3.Connection) -> None:
-    for g in SEED_GAMES:
+def add_missing_games(conn: sqlite3.Connection) -> None:
+    """Games added in later versions appear on existing installs too (switched off until enabled in the panel)."""
+    have = {r[0] for r in conn.execute("SELECT slug FROM games")}
+    seed(conn, [g for g in SEED_GAMES if g["slug"] not in have])
+
+
+def seed(conn: sqlite3.Connection, games: list[dict] | None = None) -> None:
+    for g in SEED_GAMES if games is None else games:
         cur = conn.execute(
             "INSERT INTO games (slug, kind, title, subtitle, rules, enabled, plays_per_mobile, period_days,"
             " code_valid_days, settings, created_at) VALUES (?,?,?,?,?,0,1,0,7,?,?)",
@@ -252,22 +292,32 @@ CHANCE_PLAN = [
 # quiz: (label, percent, correct answers needed)
 QUIZ_PLAN = [("۱۰٪ تخفیف", 10, 0), ("۲۰٪ تخفیف", 20, 2), ("۳۰٪ تخفیف", 30, 3), ("۴۰٪ تخفیف", 40, 4),
              ("۵۰٪ تخفیف", 50, 5)]
+# hidden word: (label, percent, score); score = 7 - guesses used when solved, 0 when not solved
+WORDLE_PLAN = [("۱۰٪ تخفیف", 10, 0), ("۲۰٪ تخفیف", 20, 2), ("۳۰٪ تخفیف", 30, 3), ("۴۰٪ تخفیف", 40, 4),
+               ("۵۰٪ تخفیف", 50, 5)]
 OLD_RULES = {'wheel': 'هر شماره موبایل یک بار می\u200cتونه بچرخونه. کد تخفیف روی همون شماره در زبانیاد فعال می\u200cشه.', 'scratch': 'هر شماره موبایل یک بار می\u200cتونه کارت رو بخراشه.', 'words': '۵ کلمه، ۶۰ ثانیه. با ۳ جواب درست ۱۰٪، با ۴ جواب ۱۵٪ و با ۵ جواب ۲۵٪ تخفیف می\u200cگیری.'}
 NEW_RULES = {'wheel': 'هر چرخش یک شانس مصرف می\u200cکند. همه برنده\u200cاند: از ۱۰٪ تا ۹۰٪ تخفیف! کد روی همان شماره در زبانیاد فعال می\u200cشود.', 'scratch': 'هر کارت یک شانس مصرف می\u200cکند. همه برنده\u200cاند: از ۱۰٪ تا ۹۰٪ تخفیف!', 'words': '۵ کلمه، ۶۰ ثانیه، یک شانس. ۰ تا ۱ جواب درست ۱۰٪، ۲ جواب ۲۰٪، ۳ جواب ۳۰٪، ۴ جواب ۴۰٪ و ۵ جواب ۵۰٪ تخفیف.'}
 
 
 def apply_prize_plan(conn: sqlite3.Connection) -> None:
-    """Puts the approved prize plan on the three built-in games once (old prize rows stay, marked deleted)."""
-    done = conn.execute("SELECT value FROM settings WHERE key='prize_plan'").fetchone()
-    if done and done[0] == PLAN_VERSION:
+    """Puts the approved prize plan on each built-in game once (old prize rows stay, marked deleted).
+    Done per game (settings key prize_plan:<slug>), so a new game gets its plan without touching edited ones."""
+    done = {r[0] for r in conn.execute("SELECT key FROM settings WHERE key LIKE 'prize_plan%'")}
+    legacy = conn.execute("SELECT value FROM settings WHERE key='prize_plan'").fetchone()
+    legacy_done = bool(legacy and legacy[0] == PLAN_VERSION)  # v5 applied it to the first three games at once
+    slugs = [g["slug"] for g in SEED_GAMES]
+    todo = [g for g in db_games(conn, slugs)
+            if f"prize_plan:{g['slug']}" not in done and not (legacy_done and g["slug"] in ("wheel", "scratch", "words"))]
+    if not todo:
         return
     conn.execute("BEGIN IMMEDIATE")
     try:
-        for g in conn.execute("SELECT id, slug, kind, rules FROM games WHERE slug IN ('wheel','scratch','words')"):
+        for g in todo:
             conn.execute("UPDATE prizes SET deleted=1, active=0 WHERE game_id=?", (g["id"],))
-            if g["kind"] == "quiz":
+            if g["kind"] in ("quiz", "wordle"):
+                plan = QUIZ_PLAN if g["kind"] == "quiz" else WORDLE_PLAN
                 rows = [(label, pct, 1, score, DEFAULT_COLORS[i % len(DEFAULT_COLORS)])
-                        for i, (label, pct, score) in enumerate(QUIZ_PLAN)]
+                        for i, (label, pct, score) in enumerate(plan)]
             else:
                 rows = [(label, pct, weight, 0, color) for label, pct, weight, color in CHANCE_PLAN]
             for i, (label, pct, weight, score, color) in enumerate(rows):
@@ -276,9 +326,14 @@ def apply_prize_plan(conn: sqlite3.Connection) -> None:
                              (g["id"], label, "percentage", pct, NO_CAP, weight, score, color, i))
             if g["rules"] == OLD_RULES.get(g["slug"]):
                 conn.execute("UPDATE games SET rules=? WHERE id=?", (NEW_RULES[g["slug"]], g["id"]))
-        conn.execute("INSERT INTO settings (key, value) VALUES ('prize_plan', ?)"
-                     " ON CONFLICT(key) DO UPDATE SET value=excluded.value", (PLAN_VERSION,))
+            conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                         (f"prize_plan:{g['slug']}", PLAN_VERSION))
     except BaseException:
         conn.execute("ROLLBACK")
         raise
     conn.execute("COMMIT")
+
+
+def db_games(conn: sqlite3.Connection, slugs: list[str]) -> list:
+    return conn.execute(f"SELECT id, slug, kind, rules FROM games WHERE slug IN ({','.join('?' * len(slugs))})",
+                        slugs).fetchall()

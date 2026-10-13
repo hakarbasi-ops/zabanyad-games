@@ -11,7 +11,7 @@
 <body>
   <header class="appbar">
     <div class="appbar-inner">
-      <a class="brand" href="/"><img src="/static/img/logo-mark.png" alt="">زبانیاد</a>
+      <a class="brand" href="/"><img src="/static/img/logo-mark.png" alt=""><span class="brand-text">زبانیاد</span></a>
       <a class="mycodes" href="/my">🎟️ کدهای من</a>
     </div>
   </header>
@@ -23,11 +23,12 @@
     <div class="game-list" id="list"><div class="closed">…</div></div>
   </main>
   <script src="/static/js/common.js"></script>
+  <script src="/static/js/otp.js"></script>
   <script>
     (async () => {
       const { api, el } = window.ZG;
       const list = document.getElementById("list");
-      const icons = { wheel: "🎡", scratch: "🎟️", quiz: "🔤" };
+      const icons = { wheel: "🎡", scratch: "🎟️", quiz: "🔤", chest: "🎁", slot: "🎰", wordle: "🧩" };
       try {
         const { games } = await api("/api/games");
         list.replaceChildren(...(games.length ? games.map((g) =>

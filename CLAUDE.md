@@ -1,6 +1,6 @@
 # Zabanyad discount games — notes for Claude Code
 
-Small games (wheel of fortune, scratch card, English word quiz) that give Zabanyad users a real discount code
+Six games: wheel of fortune, scratch card, chest (pick 1 of 3), slot machine, English word quiz, hidden word (Wordle-style) that give Zabanyad users a real discount code
 when they win. Owner is non-technical: reply in Persian, plain words. All UI text Persian, RTL, Persian digits
 (`ZG.fa`), Jalali dates (`ZG.jalaliDate`).
 
@@ -46,6 +46,19 @@ Game pages show a yellow "test mode" notice while `DISCOUNT_MODE=mock` (codes st
 Sign in with the SMS code; lists every won code, active ones soonest-to-expire first («امروز آخرین روزه!», «فقط ۲ روز
 مونده!»), then expired; buy button → SHOP_URL. Linked from the app bar («کدهای من») and every result sheet.
 Out of chances → bottom sheet pushing the invite (when referrals are on) + link to /my.
+
+## Games (v7)
+- Chance games (`games.CHANCE_KINDS` wheel/scratch/chest/slot) all go through `play_chance` (weights); scored games
+  (`SCORED_KINDS` quiz/wordle) through `_finish_scored` (best prize whose min_score the score reaches).
+- Hidden word (`kind=wordle`, slug hidden-word): Persian meaning shown as hint, 6 guesses, server holds the word and
+  answers each guess (`/wordle/start`, `/wordle/guess`, feedback correct/present/absent); score = 7 − guesses when
+  solved, 0 when not (still 10%). Words = questions rows (word 4-6 latin letters | meaning, no wrong options).
+- Chest/slot: purely visual over the drawn prize (other chests show random labels; slot reels land on the prize).
+- Built-in games added in later versions appear on old installs disabled (`db.add_missing_games`); prize plans are
+  applied once per game (`settings` key `prize_plan:<slug>`), never touching games the owner already edited.
+- Sounds: `static/js/sound.js` (Web Audio, generated; `ZG.sfx.*`, mute in header, `zg:muted`). Header shows the
+  signed-in mobile + «خروج» + mute (`otp.js renderHeader`). «وارد کردن کد در زبانیاد» → `CODE_URL`
+  (default https://zabanyad.com/install; owner said he'd confirm the address).
 
 ## Prizes and chances (owner-approved plan, v5)
 - Wheel/scratch (6 slices, NO "empty" prize, min 10%): weights per 1000 → 10%:500, 20%:280, 30%:140, 40%:60,

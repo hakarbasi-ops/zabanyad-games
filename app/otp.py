@@ -22,7 +22,7 @@ CODE_MINUTES = 2          # an SMS code is valid this long
 VERIFY_MINUTES = 30 * 24 * 60  # after verifying, the mobile stays signed in on that device for 30 days
 RESEND_SECONDS = 60
 MAX_PER_MOBILE_HOUR = 5
-MAX_PER_IP_HOUR = 20
+MAX_PER_IP_HOUR = 100       # high: many players share one mobile-operator IP
 MAX_TRIES = 5             # wrong guesses per code
 
 _serializer = URLSafeTimedSerializer(config.SESSION_SECRET, salt="zg-otp")

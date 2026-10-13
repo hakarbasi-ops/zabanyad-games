@@ -82,7 +82,7 @@ def me():
         "mode": discount.mode(),
         "secret_set": bool(config.DISCOUNT_API_SECRET),
         "api_url": config.DISCOUNT_API_URL,
-        "shop_url": config.SHOP_URL,
+        "shop_url": config.CODE_URL,
         "otp_required": config.OTP_REQUIRED,
         "sms_mode": config.SMS_MODE,
         "sms_template": config.KAVENEGAR_TEMPLATE,
@@ -115,7 +115,7 @@ class QuestionIn(BaseModel):
     id: int | None = None
     word: str = Field(min_length=1, max_length=80)
     answer: str = Field(min_length=1, max_length=80)
-    wrong: list[str] = Field(min_length=1, max_length=3)
+    wrong: list[str] = Field([], max_length=3)   # quiz: 1-3 wrong options; hidden word: none
     active: bool = True
 
 
@@ -137,7 +137,7 @@ class GameIn(BaseModel):
 
 class NewGameIn(BaseModel):
     slug: str
-    kind: Literal["wheel", "scratch", "quiz"]
+    kind: Literal["wheel", "scratch", "chest", "slot", "quiz", "wordle"]
     title: str = Field(min_length=1, max_length=80)
 
 
@@ -146,14 +146,14 @@ def _game_full(conn, game_id: int) -> dict:
     if not game:
         raise HTTPException(404, "بازی پیدا نشد.")
     game["prizes"] = games.prizes_of(conn, game_id, active_only=False)
-    if game["kind"] == "quiz":
+    if game["kind"] in games.SCORED_KINDS:
         game["questions"] = db.rows(conn.execute("SELECT * FROM questions WHERE game_id=? ORDER BY id", (game_id,)))
     return game
 
 
 def _check_prizes(kind: str, prizes: list[PrizeIn]) -> None:
     active = [p for p in prizes if p.active]
-    if kind in ("wheel", "scratch"):
+    if kind in games.CHANCE_KINDS:
         if len(active) < 2:
             raise HTTPException(400, "حداقل دو گزینه‌ی فعال لازم است.")
         if kind == "wheel" and len(active) > 12:
@@ -194,12 +194,16 @@ def create_game(body: NewGameIn):
             "INSERT INTO games (slug, kind, title, settings, created_at) VALUES (?,?,?,?,?)",
             (slug, body.kind, body.title, json.dumps(settings), now_iso()))
         gid = cur.lastrowid
-        defaults = ([("تلاش خوبی بود!", "none", 0, 0), ("۱۰٪ تخفیف", "percentage", 10, 3)] if body.kind == "quiz"
-                    else [("۱۰٪ تخفیف", "percentage", 10, 0), ("پوچ", "none", 0, 0)])
-        for i, (label, kind, amount, min_score) in enumerate(defaults):
-            conn.execute("INSERT INTO prizes (game_id, label, kind, amount, min_score, color, sort)"
-                         " VALUES (?,?,?,?,?,?,?)",
-                         (gid, label, kind, amount, min_score, db.DEFAULT_COLORS[i], i))
+        # a new game starts with the approved prize plan
+        if body.kind in games.SCORED_KINDS:
+            plan = db.QUIZ_PLAN if body.kind == "quiz" else db.WORDLE_PLAN
+            rows = [(label, pct, 1, score, db.DEFAULT_COLORS[i % len(db.DEFAULT_COLORS)])
+                    for i, (label, pct, score) in enumerate(plan)]
+        else:
+            rows = [(label, pct, weight, 0, color) for label, pct, weight, color in db.CHANCE_PLAN]
+        for i, (label, pct, weight, score, color) in enumerate(rows):
+            conn.execute("INSERT INTO prizes (game_id, label, kind, amount, max_amount, weight, min_score, color, sort)"
+                         " VALUES (?,?,?,?,?,?,?,?,?)", (gid, label, "percentage", pct, db.NO_CAP, weight, score, color, i))
         return _game_full(conn, gid)
 
 
@@ -249,10 +253,15 @@ def update_game(game_id: int, body: GameIn):
             for pid in existing - kept:  # removed rows stay for old plays' history
                 conn.execute("UPDATE prizes SET deleted=1, active=0 WHERE id=?", (pid,))
 
-            if game["kind"] == "quiz" and body.questions is not None:
+            if game["kind"] in games.SCORED_KINDS and body.questions is not None:
                 q_existing = {q["id"] for q in game["questions"]}
                 q_kept = set()
                 for q in body.questions:
+                    if game["kind"] == "quiz" and not any(w.strip() for w in q.wrong):
+                        raise HTTPException(400, f"«{q.word}»: حداقل یک گزینه‌ی غلط لازم است.")
+                    if game["kind"] == "wordle" and not (q.word.strip().isascii() and q.word.strip().isalpha()
+                                                        and 4 <= len(q.word.strip()) <= 6):
+                        raise HTTPException(400, f"«{q.word}»: کلمه باید ۴ تا ۶ حرف انگلیسی باشد.")
                     wrong = json.dumps([w.strip() for w in q.wrong if w.strip()], ensure_ascii=False)
                     if q.id in q_existing:
                         q_kept.add(q.id)

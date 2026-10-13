@@ -73,8 +73,6 @@
           el("a", { class: "btn", href: "/" }, "رفتن به بازی‌ها")),
       expired.length ? el("h3", { class: "codes-title" }, "کدهای منقضی‌شده") : "",
       expired.length ? el("div", { class: "codes" }, expired.map((c) => codeCard(c, data.shop_url))) : "",
-      el("p", { class: "rules" }, `وارد شده با ${fa(mobile)} · `,
-        el("button", { class: "link inline", type: "button", onclick: () => { ZG.signOut(); signIn(); } }, "خروج")),
     );
   }
 
@@ -95,6 +93,6 @@
         el("span", { class: `code-badge ${cls}` }, badge)),
       el("div", { class: "code-box" }, el("b", {}, c.code), c.expired ? "" : copyBtn),
       el("p", { class: "code-meta" }, `${c.game} · اعتبار تا ${jalaliDate(c.valid_until, true)}`),
-      c.expired ? "" : el("a", { class: "btn", href: shopUrl, target: "_blank", rel: "noopener" }, "خرید اشتراک با این کد"));
+      c.expired ? "" : el("a", { class: "btn", href: shopUrl, target: "_blank", rel: "noopener" }, "وارد کردن کد در زبانیاد"));
   }
 })();

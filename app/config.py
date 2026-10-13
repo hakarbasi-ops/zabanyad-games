@@ -44,6 +44,8 @@ DISCOUNT_API_TIMEOUT = float(env("DISCOUNT_API_TIMEOUT", "15"))
 # Where winners use their code (shown under the code).
 SHOP_URL = env("SHOP_URL", "https://zabanyad.com")
 SIGNUP_URL = env("SIGNUP_URL", SHOP_URL)
+# «وارد کردن کد در زبانیاد»: where a winner enters the discount code
+CODE_URL = env("CODE_URL", "https://zabanyad.com/install")
 
 TIMEZONE = env("TIMEZONE", "Asia/Tehran")
 
@@ -56,8 +58,9 @@ KAVENEGAR_API_KEY = env("KAVENEGAR_API_KEY")
 KAVENEGAR_TEMPLATE = env("KAVENEGAR_TEMPLATE")
 SMS_MODE = env("SMS_MODE", "kavenegar" if KAVENEGAR_API_KEY else "mock").lower()
 
-# Max game attempts (plays + quiz starts) from one IP per hour.
-IP_PLAYS_PER_HOUR = int(env("IP_PLAYS_PER_HOUR", "30"))
+# Max game attempts from one IP per hour. Iranian mobile operators put many users behind one IP (CGNAT), so this
+# is only a flood guard; SMS verification + chances are the real limit.
+IP_PLAYS_PER_HOUR = int(env("IP_PLAYS_PER_HOUR", "300"))
 # Behind nginx / a CDN the real client IP is in X-Forwarded-For.
 TRUST_PROXY = env("TRUST_PROXY", "1") == "1"
 

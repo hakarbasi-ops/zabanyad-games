@@ -85,14 +85,14 @@ def list_open_games():
             ok, _ = games.availability(g)
             if ok:
                 out.append({"slug": g["slug"], "kind": g["kind"], "title": g["title"], "subtitle": g["subtitle"]})
-        return {"games": out, "shop_url": config.SHOP_URL}
+        return {"games": out, "shop_url": config.CODE_URL}
 
 
 @app.get("/api/games/{slug}")
 def game_info(slug: str):
     with db.session() as conn:
         view = games.public_view(conn, games.get_game(conn, slug))
-        return {**view, "shop_url": config.SHOP_URL, "signup_url": config.SIGNUP_URL,
+        return {**view, "shop_url": config.CODE_URL, "signup_url": config.SIGNUP_URL,
                 "otp": otp.required(), "test_mode": discount.mode() == "mock"}
 
 
@@ -153,7 +153,7 @@ def my_codes(body: MobileIn):
         r["expired"] = False
     for r in expired:
         r["expired"] = True
-    return {"codes": active + expired, "wallet": view, "shop_url": config.SHOP_URL,
+    return {"codes": active + expired, "wallet": view, "shop_url": config.CODE_URL,
             "test_mode": discount.mode() == "mock"}
 
 
@@ -171,6 +171,25 @@ def quiz_start(slug: str, body: MobileIn, request: Request):
     otp.check(mobile, body.otp_token)
     with db.session() as conn:
         return games.quiz_start(conn, slug, mobile, admin.client_ip(request))
+
+
+@app.post("/api/games/{slug}/wordle/start")
+def wordle_start(slug: str, body: MobileIn, request: Request):
+    mobile = _mobile(body.mobile)
+    otp.check(mobile, body.otp_token)
+    with db.session() as conn:
+        return games.wordle_start(conn, slug, mobile, admin.client_ip(request))
+
+
+class GuessIn(BaseModel):
+    token: str
+    guess: str
+
+
+@app.post("/api/games/{slug}/wordle/guess")
+def wordle_guess(slug: str, body: GuessIn):
+    with db.session() as conn:
+        return games.wordle_guess(conn, slug, body.token, body.guess)
 
 
 class QuizFinishIn(BaseModel):
