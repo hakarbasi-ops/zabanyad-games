@@ -111,6 +111,9 @@ refresh with `pip download ... --python-version 3.12 --only-binary=:all:` when r
 /opt/zabanyad-games (.venv, data/, backups/, .env read by the app itself, not systemd). Release = bump `app/VERSION`,
 commit, `bash deploy/make-package.sh` → `dist/zabanyad-games-<N>.zip` (single top folder `zabanyad-games/`), send it;
 steps for the owner in `docs/deploy-fa.md`. Secrets only via `deploy/set-credentials.sh` on the server.
+Caching: nginx sends /static/ with `expires 7d` (Cloudflare caches .js/.css too). v9 shipped without busting and the new
+pages ran the old cached common.js → empty home page. Since v10 `main._page` serves every HTML page with `?v=<VERSION>` on
+each /static .js/.css link and `Cache-Control: no-cache`: ALWAYS bump app/VERSION on a release, or browsers keep old files.
 DNS of zabanyad.com is on CLOUDFLARE (not Arvan). First try gave Cloudflare 521 (SSL mode Full → origin:443 closed,
 and/or Iranian server not reachable from abroad). HTTPS: `deploy/enable-https.sh` (Let's Encrypt; webroot, else DNS-01
 via a Cloudflare token typed on the server into /root/.secrets/cloudflare.ini). `deploy/nginx-setup.sh` writes

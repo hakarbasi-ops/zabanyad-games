@@ -1,9 +1,11 @@
 """Zabanyad games: public game pages + admin panel, one FastAPI app."""
 import logging
+import re
 from contextlib import asynccontextmanager
+from functools import lru_cache
 
 from fastapi import FastAPI, Request
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -13,6 +15,19 @@ from .util import local_now, normalize_mobile
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
 
 STATIC = config.ROOT / "static"
+VERSION = (config.ROOT / "app" / "VERSION").read_text().strip() if (config.ROOT / "app" / "VERSION").exists() else "0"
+
+
+@lru_cache(maxsize=None)
+def _html(name: str) -> str:
+    # scripts and styles are cached for days (nginx, Cloudflare, the browser): a ?v=<version> on every link makes
+    # each release load its own files instead of the old cached ones
+    html = (STATIC / name).read_text(encoding="utf-8")
+    return re.sub(r'(/static/[^"\'?]+\.(?:js|css))(["\'])', rf"\1?v={VERSION}\2", html)
+
+
+def _page(name: str) -> HTMLResponse:
+    return HTMLResponse(_html(name), headers={"Cache-Control": "no-cache"})
 
 
 @asynccontextmanager
@@ -46,22 +61,22 @@ async def _play_error(_: Request, exc: games.PlayError):
 
 @app.get("/", include_in_schema=False)
 def home():
-    return FileResponse(STATIC / "index.html")
+    return _page("index.html")
 
 
 @app.get("/g/{slug}", include_in_schema=False)
 def game_page(slug: str):
-    return FileResponse(STATIC / "play.html")
+    return _page("play.html")
 
 
 @app.get("/my", include_in_schema=False)
 def my_page():
-    return FileResponse(STATIC / "my.html")
+    return _page("my.html")
 
 
 @app.get("/admin", include_in_schema=False)
 def admin_page():
-    return FileResponse(STATIC / "admin" / "index.html")
+    return _page("admin/index.html")
 
 
 @app.get("/admin/", include_in_schema=False)
