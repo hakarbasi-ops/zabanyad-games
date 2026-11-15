@@ -71,9 +71,9 @@
     const expired = data.codes.filter((c) => c.expired);
     root.replaceChildren(
       el("div", { class: "wallet" },
-        el("div", { class: "wallet-count" }, el("span", { class: "wallet-icon" }, "🎟️"),
+        el("div", { class: "wallet-count" }, el("span", { class: "wallet-icon" }, ZG.art("ticket", "wallet-art")),
           w.chances > 0 ? el("span", {}, el("b", {}, fa(w.chances)), " شانس داری") : el("span", {}, "فردا یه شانس تازه داری")),
-        el("a", { class: "wallet-invite", href: "/" }, w.chances > 0 ? "🎮 بازی کن" : "🎮 بازی‌ها")),
+        el("a", { class: "wallet-invite", href: "/" }, ZG.icon("play"), w.chances > 0 ? " بازی کن" : " بازی‌ها")),
       data.test_mode ? el("p", { class: "notice" }, "حالت آزمایشی: این کدها ساختگی‌اند و در زبانیاد کار نمی‌کنند.") : "",
       active.length
         ? el("div", { class: "codes" }, active.map((c) => codeCard(c, data.shop_url)))

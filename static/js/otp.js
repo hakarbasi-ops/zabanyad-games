@@ -119,7 +119,7 @@
     }
     if (window.ZG.sfx) {
       const btn = el("button", { type: "button", class: "mute", "aria-label": "صدا" });
-      const paint = () => { btn.textContent = ZG.sfx.isMuted() ? "🔇" : "🔊"; };
+      const paint = () => { btn.replaceChildren(ZG.icon(ZG.sfx.isMuted() ? "mute" : "sound")); };
       btn.addEventListener("click", () => { ZG.sfx.setMuted(!ZG.sfx.isMuted()); paint(); });
       paint();
       bar.append(btn);

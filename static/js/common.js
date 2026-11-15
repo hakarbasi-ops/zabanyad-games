@@ -144,5 +144,28 @@
     return `${wd} ${jalaliDate(`${m[1]}-${m[2]}-${m[3]} 12:00`).replace(/\s[۰-۹]{4}$/, "")}`;
   }
 
-  window.ZG = { fa, money, jalaliDate, api, el, store, copy, src: () => src, visit, dayName };
+  // drawn illustrations (static/img/art/*.svg) instead of emoji; ?v= so a redrawn picture is not served from cache
+  const V = (document.querySelector('meta[name="zg-version"]') || {}).content || "";
+  function art(name, cls = "art") {
+    return el("img", { class: cls, src: `/static/img/art/${name}.svg${V ? `?v=${V}` : ""}`, alt: "", "aria-hidden": "true", draggable: "false" });
+  }
+  // small line icons that take the text colour
+  const ICONS = {
+    ticket: '<path d="M4 7h16v3a2 2 0 0 0 0 4v3H4v-3a2 2 0 0 0 0-4Z"/><path d="M15 7v10" stroke-dasharray="2 2"/>',
+    gift: '<rect x="3.5" y="9" width="17" height="11" rx="1.5"/><path d="M2.5 9h19M12 9v11M12 9C10 5 6.5 4 6 6.5S9 9 12 9Zm0 0c2-4 5.5-5 6-2.5S15 9 12 9Z"/>',
+    play: '<rect x="2.5" y="7" width="19" height="11" rx="5.5"/><path d="M7.5 10.5v4M5.5 12.5h4"/><circle cx="15.5" cy="11.5" r=".6" fill="currentColor"/><circle cx="17.5" cy="13.5" r=".6" fill="currentColor"/>',
+    sound: '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4Z"/><path d="M15.5 9a4.5 4.5 0 0 1 0 6M18 6.5a8 8 0 0 1 0 11"/>',
+    mute: '<path d="M4 9.5h3.5L12 5.5v13l-4.5-4H4Z"/><path d="m16 9.5 5 5m0-5-5 5"/>',
+    hourglass: '<path d="M6.5 3.5h11M6.5 20.5h11M7.5 3.5c0 5 9 6 9 8.5s-9 3.5-9 8.5M16.5 3.5c0 5-9 6-9 8.5s9 3.5 9 8.5"/>',
+    flame: '<path d="M12 21c4 0 6.5-2.6 6.5-6.2 0-4.3-4-6.3-4.5-10.3-2.8 1.8-4 4.5-3.7 7-1-.4-1.8-1.5-2-2.8C6.6 10.4 5.5 12.6 5.5 14.8 5.5 18.4 8 21 12 21Z"/>',
+    sparkle: '<path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5 18 18M18 6l-2.5 2.5M8.5 15.5 6 18"/>',
+    lock: '<rect x="5" y="10.5" width="14" height="10" rx="2"/><path d="M8 10.5V8a4 4 0 0 1 8 0v2.5M12 14.5v2.5"/>',
+    trophy: '<path d="M8 4h8v5a4 4 0 0 1-8 0Z"/><path d="M8 6H4.5c0 3 1.5 4.5 3.7 4.8M16 6h3.5c0 3-1.5 4.5-3.7 4.8M12 13v4M8.5 20h7l-.8-3h-5.4Z"/>',
+  };
+  function icon(name) {
+    return el("span", { class: "ico", "aria-hidden": "true", html:
+      `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[name] || ""}</svg>` });
+  }
+
+  window.ZG = { fa, money, jalaliDate, api, el, store, copy, src: () => src, visit, dayName, art, icon, ICONS };
 })();

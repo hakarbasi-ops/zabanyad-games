@@ -22,7 +22,8 @@ VERSION = (config.ROOT / "app" / "VERSION").read_text().strip() if (config.ROOT 
 def _html(name: str) -> str:
     # scripts and styles are cached for days (nginx, Cloudflare, the browser): a ?v=<version> on every link makes
     # each release load its own files instead of the old cached ones
-    html = (STATIC / name).read_text(encoding="utf-8")
+    html = (STATIC / name).read_text(encoding="utf-8").replace(
+        "<head>", f'<head>\n  <meta name="zg-version" content="{VERSION}">', 1)
     return re.sub(r'(/static/[^"\'?]+\.(?:js|css))(["\'])', rf"\1?v={VERSION}\2", html)
 
 

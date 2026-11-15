@@ -1,6 +1,6 @@
 // Game page: /g/<slug>. Loads the game, asks for the mobile number, plays, shows the code.
 (function () {
-  const { fa, jalaliDate, api, el, store, copy, visit, dayName } = window.ZG;
+  const { fa, jalaliDate, api, el, store, copy, visit, dayName, art, icon } = window.ZG;
   const sfx = window.ZG.sfx;
   const slug = decodeURIComponent(location.pathname.split("/").filter(Boolean).pop() || "");
   const app = document.getElementById("app");
@@ -25,8 +25,8 @@
       if (meta) meta.content = "#0c0c11";
     }
     if (info.color) document.documentElement.style.setProperty("--brand", info.color);
-    document.getElementById("eyebrow").textContent = { wheel: "گردونه شانس", scratch: "کارت خراشی", quiz: "چالش کلمه", chest: "صندوق شانس", slot: "ماشین شانس", wordle: "کلمه‌ی مخفی", vault: "ویژه‌ی جمعه سیاه 🖤" }[info.kind] || "";
-    if (info.theme === "bf") document.getElementById("eyebrow").textContent = "ویژه‌ی جمعه سیاه 🖤";
+    document.getElementById("eyebrow").textContent = { wheel: "گردونه شانس", scratch: "کارت خراشی", quiz: "چالش کلمه", chest: "صندوق شانس", slot: "ماشین شانس", wordle: "کلمه‌ی مخفی", vault: "ویژه‌ی جمعه سیاه" }[info.kind] || "";
+    if (info.theme === "bf") document.getElementById("eyebrow").textContent = "ویژه‌ی جمعه سیاه";
     document.getElementById("title").textContent = info.title;
     document.getElementById("subtitle").textContent = info.subtitle || "";
     document.getElementById("rules").textContent = info.rules || "";
@@ -65,9 +65,9 @@
     wallet = { ...(wallet || {}), ...w };
     const n = wallet.chances;
     walletBar.replaceChildren(
-      el("div", { class: "wallet-count" }, el("span", { class: "wallet-icon" }, "🎟️"),
+      el("div", { class: "wallet-count" }, el("span", { class: "wallet-icon" }, art("ticket", "wallet-art")),
         n > 0 ? el("span", {}, el("b", {}, fa(n)), " شانس داری") : el("span", {}, "شانست تموم شد؛ فردا یه شانس تازه داری")),
-      wallet.referral_enabled ? el("button", { class: "wallet-invite", type: "button", onclick: showInvite }, "🎁 دعوت دوستان") : "");
+      wallet.referral_enabled ? el("button", { class: "wallet-invite", type: "button", onclick: showInvite }, icon("gift"), " دعوت دوستان") : "");
     walletBar.classList.remove("hidden");
   }
 
@@ -77,12 +77,12 @@
     const canInvite = wallet && wallet.referral_enabled && wallet.ref_code;
     const overlay = el("div", { class: "overlay", onclick: (e) => e.target === overlay && close() },
       el("div", { class: "sheet", role: "dialog", "aria-modal": "true" },
-        el("div", { class: "big" }, "🎟️"),
+        art("ticket", "art-big"),
         el("h2", {}, "شانس‌های امروزت تموم شد!"),
         el("p", {}, canInvite
           ? `می‌خوای همین الان دوباره بازی کنی؟ هر دوستی که دعوت کنی، ${fa(wallet.referral_reward)} شانس تازه برات میاره.`
           : (message || "فردا یه شانس تازه داری.")),
-        canInvite ? el("button", { class: "btn", type: "button", onclick: () => { close(); showInvite(); } }, "🎁 دعوت دوستان و گرفتن شانس") : "",
+        canInvite ? el("button", { class: "btn", type: "button", onclick: () => { close(); showInvite(); } }, icon("gift"), " دعوت دوستان و گرفتن شانس") : "",
         el("a", { class: "btn outline", href: "/my" }, "دیدن کدهای تخفیف من"),
         el("button", { class: "link", type: "button", onclick: close }, "فردا برمی‌گردم")));
     document.body.append(overlay);
@@ -99,7 +99,7 @@
       onclick: () => navigator.share({ title: "بازی‌های زبانیاد", text, url: link }).catch(() => {}) }, "اشتراک‌گذاری لینک") : "";
     const overlay = el("div", { class: "overlay", onclick: (e) => e.target === overlay && close() },
       el("div", { class: "sheet", role: "dialog", "aria-modal": "true" },
-        el("div", { class: "big" }, "🎁"),
+        art("gift", "art-big"),
         el("h2", {}, "دوستات رو دعوت کن، شانس هدیه بگیر!"),
         el("p", {}, `هر دوستی که با لینک تو بیاد و شماره‌اش رو تأیید کنه، ${fa(wallet.referral_reward)} شانس برای تو و ${fa(wallet.invitee_chances)} شانس برای خودش.`),
         el("div", { class: "code-box" }, el("b", { class: "link-text" }, link), copyBtn),
@@ -418,7 +418,7 @@
         el("small", {}, got.res.result === "won" ? "کد تخفیف شما آماده است" : "دفعه‌ی بعد!"));
       ready = true;
       form.classList.add("hidden");
-      hint.textContent = "با انگشت روی کارت بکشید 👆";
+      hint.textContent = "با انگشت روی کارت بکشید";
     });
   }
 
@@ -578,12 +578,12 @@
       return { reel: el("div", { class: "reel" }, strip), strip };
     });
     const machine = el("div", { class: "slot-machine" },
-      el("div", { class: "slot-top" }, "🎰 ماشین شانس زبانیاد"),
+      el("div", { class: "slot-top" }, "ماشین شانس زبانیاد"),
       el("div", { class: "reels" }, reels.map((r) => r.reel)),
       el("div", { class: "slot-line" }));
     const input = mobileField("mobile");
     const box = errorBox();
-    const button = el("button", { class: "btn", type: "button" }, "اهرم رو بکش! 🎰");
+    const button = el("button", { class: "btn", type: "button" }, "اهرم رو بکش!");
     app.replaceChildren(machine, input, button, box, pastResult() || "");
 
     button.addEventListener("click", async () => {
@@ -613,7 +613,7 @@
         machine.classList.remove("win");
         remember(res, mobile);
         showResult({ ...res, mobile });
-        button.textContent = "اهرم رو بکش! 🎰";
+        button.textContent = "اهرم رو بکش!";
         button.disabled = false;
       }, 700);
     });
@@ -753,7 +753,7 @@
     return { d, h, m, s: sec };
   }
   const pad = (n) => String(n).padStart(2, "0");
-  const TIER_ICON = { 3: "🥇", 2: "🥈", 1: "🥉" };
+  const TIER_ART = { 3: "medal-gold", 2: "medal-silver", 1: "medal-bronze" };
 
   function vaultBox(tier) {
     return el("div", { class: `vault t${tier || 3}` },
@@ -765,7 +765,7 @@
     const rule = (t) => t === 3 ? `${fa(1)} تا ${fa(info.gold_max)} حدس`
       : t === 2 ? `${fa(info.gold_max + 1)} تا ${fa(info.silver_max)} حدس` : "حتی اگه پیدا نکنی";
     return el("div", { class: "bf-tiers" }, info.tiers.map((t) =>
-      el("div", { class: `bf-tier t${t.tier}` }, el("i", {}, TIER_ICON[t.tier]), el("b", {}, t.name),
+      el("div", { class: `bf-tier t${t.tier}` }, art(TIER_ART[t.tier], "tier-art"), el("b", {}, t.name),
         el("small", {}, rule(t.tier)), el("em", {}, t.labels.map(shortLabel).join("، ")))));
   }
 
@@ -782,7 +782,7 @@
       };
       const timer = setInterval(upd, 1000);
       upd();
-      strip.append(el("div", { class: "bf-count" }, el("span", {}, "⏳ تا پایان جمعه سیاه"), clock));
+      strip.append(el("div", { class: "bf-count" }, el("span", {}, icon("hourglass"), " تا پایان جمعه سیاه"), clock));
     }
     const badges = el("div", { class: "bf-badges" });
     strip.append(badges);
@@ -828,7 +828,7 @@
         if (badges) paintBadges(badges, w.limited, w.golden_now);
         if (!w.winners.length) return;
         track.replaceChildren(...w.winners.map((x) =>
-          el("span", {}, "🎉 ", el("span", { class: "m" }, fa(x.mobile)), " ", el("b", {}, x.prize), " برد · ", ago(x.ago))));
+          el("span", {}, icon("sparkle"), " ", el("span", { class: "m" }, fa(x.mobile)), " ", el("b", {}, x.prize), " برد · ", ago(x.ago))));
         track.style.setProperty("--dur", `${Math.max(18, w.winners.length * 5)}s`);
         box.classList.remove("hidden");
       } catch (e) { /* the ticker is decoration only */ }
@@ -841,7 +841,7 @@
   // Black Friday: other games are paused; send the player to the focus game
   function renderFocusNotice() {
     app.replaceChildren(el("div", { class: "bf-teaser" },
-      el("div", { class: "big" }, "🖤"),
+      art("bf-wheel", "art-big"),
       el("h3", {}, info.message),
       el("p", {}, "بقیه‌ی بازی‌ها بعد از جمعه سیاه دوباره باز می‌شن."),
       el("a", { class: "btn", href: `/g/${encodeURIComponent(info.focus.slug)}` }, `رفتن به ${info.focus.title}`)));
@@ -852,7 +852,7 @@
     const box = el("section", { class: "jackpot hidden" });
     api("/api/jackpot-winners").then(({ winners }) => {
       if (!winners.length && !(showEmpty && info && info.open)) return;
-      box.replaceChildren(el("h3", {}, "🏆 برنده‌های ۹۰٪ جمعه سیاه"),
+      box.replaceChildren(el("h3", {}, icon("trophy"), " برنده‌های ۹۰٪ جمعه سیاه"),
         winners.length ? el("ol", {}, winners.map((w) => el("li", {},
           el("span", { class: "m" }, fa(w.mobile)), el("span", {}, w.game), el("small", {}, jalaliDate(w.at, true)))))
           : el("p", {}, "هنوز کسی ۹۰٪ نبرده؛ شاید تو اولین نفر باشی!"));
@@ -874,7 +874,7 @@
     upd();
     const vault = info.kind === "vault";
     app.replaceChildren(el("div", { class: "bf-teaser" },
-      el("div", { class: "big" }, vault ? "🔐" : "🎡"),
+      art(vault ? "vault" : "bf-wheel", "art-big"),
       el("h3", {}, vault ? "گاوصندوق‌های جمعه سیاه به‌زودی باز می‌شن!" : `${info.title} به‌زودی شروع می‌شه!`),
       el("p", {}, vault ? `از ${jalaliDate(info.starts_at, true)} بیا رمز گاوصندوق رو پیدا کن و تا ۹۰٪ تخفیف ببر.`
         : `از ${dayName(info.starts_at)} ساعت ${fa(info.starts_at.slice(11, 16))} بچرخون و تا ۹۰٪ تخفیف بگیر.`),
@@ -887,7 +887,7 @@
     const { strip, badges } = eventStrip();
     const input = mobileField("mobile");
     const box = errorBox();
-    const button = el("button", { class: "btn", type: "button" }, "رمز رو حدس بزن 🔐");
+    const button = el("button", { class: "btn", type: "button" }, icon("lock"), " رمز رو حدس بزن");
     const intro = el("p", { class: "bf-intro" },
       `رمز گاوصندوق ${fa(info.digits)} رقمه و هیچ رقمی تکرار نمی‌شه. ${fa(info.max_guesses)} حدس داری؛ سبز یعنی رقم درست سر جای درست، زرد یعنی این رقم هست ولی جای دیگه. هرچی زودتر پیدا کنی، گاوصندوق بهتری باز می‌کنی!`);
     app.replaceChildren(strip, vaultBox(3), intro, tiersCard(), input, button, box, pastResult() || "", winnersTicker(badges));
@@ -1012,11 +1012,11 @@
     const vault = vaultBox(res.tier);
     vault.style.width = "min(240px, 72%)";
     vault.querySelector(".vault-prize").append(
-      res.result === "won" ? shortLabel(res.prize_label) : "🙂", el("small", {}, `گاوصندوق ${res.tier_name || ""}`));
+      res.result === "won" ? shortLabel(res.prize_label) : "—", el("small", {}, `گاوصندوق ${res.tier_name || ""}`));
     const title = el("p", { class: "vmsg", style: "font-size:15px;color:#fff;font-weight:700" },
       res.solved ? `رمز رو در ${fa(res.guesses)} حدس پیدا کردی! گاوصندوق ${res.tier_name} داره باز می‌شه…`
         : `رمز ${fa(res.answer || "")} بود. گاوصندوق ${res.tier_name || "برنزی"} داره باز می‌شه…`);
-    app.replaceChildren(vault, title, res.golden ? el("p", { class: "vmsg" }, "🔥 ساعت طلایی بود؛ شانس جایزه‌ی بزرگ بیشتر بود!") : "");
+    app.replaceChildren(vault, title, res.golden ? el("p", { class: "vmsg" }, icon("flame"), " ساعت طلایی بود؛ شانس جایزه‌ی بزرگ بیشتر بود!") : "");
     const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
     const dial = vault.querySelector(".vault-dial");
     vault.classList.add("shake");
@@ -1039,7 +1039,7 @@
   function scorePill(res) {
     if (res.tier_name) {  // Black Friday vault
       return el("div", {},
-        el("div", { class: "pill" }, `${TIER_ICON[res.tier]} گاوصندوق ${res.tier_name}`),
+        el("div", { class: "pill" }, art(TIER_ART[res.tier], "pill-art"), `گاوصندوق ${res.tier_name}`),
         el("p", { class: "muted" }, res.solved ? `رمز ${fa(res.answer)} رو در ${fa(res.guesses)} حدس پیدا کردی.`
           : `رمز ${fa(res.answer)} بود.`),
         res.earned_tier > res.tier ? el("p", { class: "muted" }, "جایزه‌های گاوصندوق بالاتر تموم شده بود؛ این یکی برات باز شد.") : "");
@@ -1063,7 +1063,7 @@
       });
       const campaign = !!info.buy_url;
       body.push(
-        el("div", { class: "big" }, percentOf(res.prize_label) >= 90 ? "🏆" : "🎁"),
+        art(percentOf(res.prize_label) >= 90 ? "trophy" : "gift", "art-big"),
         el("h2", {}, res.answer && !res.solved ? `پیدا نشد، ولی ${res.prize_label} بردی!` : `تبریک، ${res.prize_label} بردی!`),
         scorePill(res),
         campaign ? el("p", {}, "کد شخصی تو:") : "",
@@ -1080,7 +1080,7 @@
       sfx.win(percentOf(res.prize_label) >= 40);
     } else {
       body.push(
-        el("div", { class: "big" }, res.late ? "⏰" : "🙂"),
+        art(res.late ? "clock" : "smile", "art-big"),
         el("h2", {}, res.late ? "وقت تمام شد!" : (res.prize_label || "این بار نشد!")),
         scorePill(res),
         el("p", { class: "muted" }, "ممنون که بازی کردی. حتماً به زبانیاد سر بزن!"),
@@ -1090,7 +1090,7 @@
     if (wallet && wallet.chances === 0 && wallet.referral_enabled) {
       body.push(el("div", { class: "invite-cta" },
         el("p", {}, `شانس‌هات تموم شد! با دعوت هر دوست ${fa(wallet.referral_reward)} شانس تازه بگیر.`),
-        el("button", { class: "btn outline", type: "button", onclick: () => { close(); showInvite(); } }, "🎁 دعوت دوستان")));
+        el("button", { class: "btn outline", type: "button", onclick: () => { close(); showInvite(); } }, icon("gift"), " دعوت دوستان")));
     }
     body.push(el("a", { class: "link", href: "/my" }, "همه‌ی کدهای تخفیف من"));
     body.push(el("button", { class: "link", type: "button", onclick: close }, "بستن"));

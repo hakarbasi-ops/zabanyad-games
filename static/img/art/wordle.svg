@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96">
+<ellipse cx="48" cy="89" rx="30" ry="3.5" fill="#212228" opacity=".15"/>
+<g font-family="Arial,sans-serif" font-weight="900" font-size="20" text-anchor="middle">
+<rect x="14" y="14" width="32" height="32" rx="8" fill="#06C270"/><text x="30" y="37" fill="#fff">W</text>
+<rect x="50" y="14" width="32" height="32" rx="8" fill="#FFCC00"/><text x="66" y="37" fill="#212228">O</text>
+<rect x="14" y="50" width="32" height="32" rx="8" fill="#6B7588"/><text x="30" y="73" fill="#fff">R</text>
+<rect x="50" y="50" width="32" height="32" rx="8" fill="#fff" stroke="#F26600" stroke-width="3"/><text x="66" y="73" fill="#F26600">D</text>
+</g></svg>

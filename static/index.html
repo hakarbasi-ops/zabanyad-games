@@ -12,7 +12,7 @@
   <header class="appbar">
     <div class="appbar-inner">
       <a class="brand" href="/"><img src="/static/img/logo-mark.png" alt=""><span class="brand-text">زبانیاد</span></a>
-      <a class="mycodes" href="/my">🎟️ کدهای من</a>
+      <a class="mycodes" href="/my"><span class="ico" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 7h16v3a2 2 0 0 0 0 4v3H4v-3a2 2 0 0 0 0-4Z"/><path d="M15 7v10" stroke-dasharray="2 2"/></svg></span> کدهای من</a>
     </div>
   </header>
   <main class="page">
@@ -26,15 +26,15 @@
   <script src="/static/js/otp.js"></script>
   <script>
     (async () => {
-      const { api, el, jalaliDate, fa } = window.ZG;
+      const { api, el, jalaliDate, fa, art, icon } = window.ZG;
       ZG.visit("home");
       const list = document.getElementById("list");
-      const icons = { wheel: "🎡", scratch: "🎟️", quiz: "🔤", chest: "🎁", slot: "🎰", wordle: "🧩", vault: "🔐" };
+      const pics = { wheel: "wheel", scratch: "ticket", quiz: "quiz", chest: "chest", slot: "slot", wordle: "wordle", vault: "vault" };
       try {
         const { games, focus, jackpot } = await api("/api/games");
         if (focus) list.before(el("a", { class: "focus-banner", href: `/g/${encodeURIComponent(focus.slug)}` }, focus.message || focus.title, " ←"));
         if (jackpot && jackpot.length) {
-          list.after(el("section", { class: "jackpot" }, el("h3", {}, "🏆 برنده‌های ۹۰٪ جمعه سیاه"),
+          list.after(el("section", { class: "jackpot" }, el("h3", {}, icon("trophy"), " برنده‌های ۹۰٪ جمعه سیاه"),
             el("ol", {}, jackpot.slice(0, 10).map((w) => el("li", {}, el("span", { class: "m" }, fa(w.mobile)),
               el("span", {}, w.game), el("small", {}, jalaliDate(w.at, true)))))));
         }
@@ -44,7 +44,7 @@
             el("b", {}, g.title), el("span", {}, g.subtitle),
             g.soon ? el("span", { class: "soon" }, `به‌زودی · شروع ${jalaliDate(g.starts_at, true)}`)
               : g.theme === "bf" && g.ends_at ? el("span", { class: "soon" }, `فقط تا ${jalaliDate(g.ends_at)}`) : "",
-            el("i", { class: "icon", "aria-hidden": "true" }, icons[g.kind] || "🎁"))) :
+            art(g.theme === "bf" && g.kind === "wheel" ? "bf-wheel" : pics[g.kind] || "gift", "icon"))) :
           [el("div", { class: "card closed" }, "فعلاً بازی فعالی نداریم. به‌زودی برمی‌گردیم!")]));
       } catch (e) {
         list.replaceChildren(el("div", { class: "card closed" }, e.message));

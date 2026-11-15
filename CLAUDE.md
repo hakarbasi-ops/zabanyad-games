@@ -56,6 +56,10 @@ Out of chances → bottom sheet pushing the invite (when referrals are on) + lin
 - Chest/slot: purely visual over the drawn prize (other chests show random labels; slot reels land on the prize).
 - Built-in games added in later versions appear on old installs disabled (`db.add_missing_games`); prize plans are
   applied once per game (`settings` key `prize_plan:<slug>`), never touching games the owner already edited.
+- Pictures (v11, owner asked to drop Apple emoji): drawn SVG illustrations in `static/img/art/` (wheel, bf-wheel, ticket,
+  quiz, chest, slot, wordle, vault, gift, trophy, clock, smile, medal-gold/silver/bronze; brand palette) via `ZG.art(name, cls)`,
+  and small line icons via `ZG.icon(name)` (common.js ICONS: ticket, gift, play, sound, mute, hourglass, flame, sparkle, lock,
+  trophy; take the text colour). Pages carry `<meta name="zg-version">` so art URLs get ?v= too. Admin panel still uses emoji.
 - Sounds: `static/js/sound.js` (Web Audio, generated; `ZG.sfx.*`, mute in header, `zg:muted`). Header shows the
   signed-in mobile + «خروج» + mute (`otp.js renderHeader`). «وارد کردن کد در زبانیاد» → `CODE_URL`
   (default https://zabanyad.com/install; owner said he'd confirm the address).
