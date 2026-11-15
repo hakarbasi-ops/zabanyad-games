@@ -89,6 +89,14 @@
         setTimeout(() => { tone(1047, 0, 0.9, { type: "triangle", gain: 0.12 }); tone(1319, 0, 0.9, { type: "triangle", gain: 0.08 }); tone(1568, 0, 0.9, { type: "triangle", gain: 0.06 }); }, 950);
       }
     },
+    // vault: a dial click, then the bolt sliding back and a bright chime
+    dial() { tone(1800, 0, 0.025, { type: "square", gain: 0.05 }); noise(0, 0.03, { gain: 0.05, freq: 4000, q: 2 }); },
+    unlock() {
+      tone(90, 0, 0.25, { type: "square", gain: 0.12, to: 55 });
+      noise(0, 0.18, { gain: 0.12, freq: 600, q: 0.7 });
+      noise(0.2, 0.5, { gain: 0.05, freq: 300, q: 0.5 });
+      notes([784, 1175, 1568], 0.08, { type: "triangle", gain: 0.12, dur: 0.5 });
+    },
     meh() { notes([523, 494, 440], 0.12, { type: "triangle", gain: 0.1 }); },
     isMuted: () => muted,
     setMuted(v) {

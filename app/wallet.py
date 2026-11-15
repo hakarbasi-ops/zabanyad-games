@@ -5,10 +5,13 @@
 - Inviting: when an invited mobile that never played before verifies, the inviter gets `referral_reward` (3),
   at most `referral_daily_cap` (10) successful invites per inviter per day. Only while `referral_enabled` is on
   (keep it off until real SMS is wired, or fake numbers could farm chances).
+- Event bonus: an enabled vault game whose settings carry bonus_date (Tehran YYYY-MM-DD) = today adds
+  bonus_chances to that day's chance (Black Friday).
 - A play costs one chance; it is given back when the play does not count (not signed up / API error).
 
 All functions expect to run inside the caller's transaction.
 """
+import json
 import secrets
 
 from . import db
@@ -69,13 +72,26 @@ def _get(conn, mobile: str) -> dict | None:
     return db.row(conn.execute("SELECT * FROM players WHERE mobile=?", (mobile,)).fetchone())
 
 
+def bonus_today(conn, today: str | None = None) -> int:
+    today = today or _today()
+    extra = 0
+    for r in conn.execute("SELECT settings FROM games WHERE enabled=1 AND kind='vault'"):
+        try:
+            cfg = json.loads(r["settings"] or "{}")
+            if cfg.get("bonus_date") == today:
+                extra += max(0, min(int(cfg.get("bonus_chances", 0)), 10))
+        except (ValueError, TypeError):
+            continue
+    return extra
+
+
 def ensure(conn, mobile: str, ref: str | None = None) -> dict:
     """Returns the player, creating it (with referral credit) or adding today's chance as needed."""
     cfg = settings(conn)
     today = _today()
     player = _get(conn, mobile)
     if player is None:
-        chances = cfg["start_chances"]
+        chances = cfg["start_chances"] + bonus_today(conn, today)
         inviter = _credit_inviter(conn, cfg, mobile, ref)
         if inviter:
             chances += cfg["invitee_bonus"]
@@ -84,7 +100,7 @@ def ensure(conn, mobile: str, ref: str | None = None) -> dict:
         return _get(conn, mobile)
     if player["last_daily"] != today:
         conn.execute("UPDATE players SET chances = chances + ?, last_daily=? WHERE mobile=?",
-                     (cfg["daily_chance"], today, mobile))
+                     (cfg["daily_chance"] + bonus_today(conn, today), today, mobile))
         player = _get(conn, mobile)
     return player
 

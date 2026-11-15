@@ -18,17 +18,23 @@
       return;
     }
     document.title = info.title;
+    if (info.kind === "vault") {
+      document.body.classList.add("theme-bf");
+      const meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.content = "#0c0c11";
+    }
     if (info.color) document.documentElement.style.setProperty("--brand", info.color);
-    document.getElementById("eyebrow").textContent = { wheel: "گردونه شانس", scratch: "کارت خراشی", quiz: "چالش کلمه", chest: "صندوق شانس", slot: "ماشین شانس", wordle: "کلمه‌ی مخفی" }[info.kind] || "";
+    document.getElementById("eyebrow").textContent = { wheel: "گردونه شانس", scratch: "کارت خراشی", quiz: "چالش کلمه", chest: "صندوق شانس", slot: "ماشین شانس", wordle: "کلمه‌ی مخفی", vault: "ویژه‌ی جمعه سیاه 🖤" }[info.kind] || "";
     document.getElementById("title").textContent = info.title;
     document.getElementById("subtitle").textContent = info.subtitle || "";
     document.getElementById("rules").textContent = info.rules || "";
     if (!info.open) {
-      app.replaceChildren(el("div", { class: "closed" }, info.message));
+      if (info.kind === "vault" && info.teaser && info.starts_at && msLeft(info.starts_at) > 0) renderVaultTeaser();
+      else app.replaceChildren(el("div", { class: "closed" }, info.message));
       return;
     }
     ({ wheel: renderWheel, scratch: renderScratch, quiz: renderQuiz, chest: renderChest, slot: renderSlot,
-       wordle: renderWordle })[info.kind]();
+       wordle: renderWordle, vault: renderVault })[info.kind]();
     if (info.test_mode) {
       app.before(el("p", { class: "notice" },
         "حالت آزمایشی: کدهای تخفیف این صفحه ساختگی‌اند (با T شروع می‌شوند) و در زبانیاد کار نمی‌کنند."));
@@ -641,8 +647,8 @@
 
     const onKey = (e) => {
       if (over || e.ctrlKey || e.metaKey || e.altKey) return;
-      if (e.key === "Enter") submit();
-      else if (e.key === "Backspace") back();
+      if (e.key === "Enter") { e.preventDefault(); submit(); }
+      else if (e.key === "Backspace") { e.preventDefault(); back(); }
       else if (/^[a-zA-Z]$/.test(e.key)) type(e.key.toLowerCase());
     };
     document.addEventListener("keydown", onKey);
@@ -708,6 +714,265 @@
     }
   }
 
+
+  // ------------------------------------------------------------ Black Friday vault: crack the 4-digit code, open a vault
+
+  const loadedAt = Date.now();
+  // event times are Tehran wall-clock strings; count against the server's own clock so a wrong phone clock does not matter
+  const wall = (v) => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?/.exec(v || "");
+    return m ? Date.UTC(+m[1], m[2] - 1, +m[3], +m[4], +m[5], +(m[6] || 0)) : NaN;
+  };
+  function msLeft(target) {
+    return wall(target) - wall(info.server_now) - (Date.now() - loadedAt);
+  }
+  function hms(ms) {
+    const t = Math.max(0, Math.floor(ms / 1000));
+    const d = Math.floor(t / 86400), h = Math.floor((t % 86400) / 3600), m = Math.floor((t % 3600) / 60), sec = t % 60;
+    return { d, h, m, s: sec };
+  }
+  const pad = (n) => String(n).padStart(2, "0");
+  const TIER_ICON = { 3: "🥇", 2: "🥈", 1: "🥉" };
+
+  function vaultBox(tier) {
+    return el("div", { class: `vault t${tier || 3}` },
+      el("div", { class: "vault-prize" }),
+      el("div", { class: "vault-door" }, el("div", { class: "vault-dial" })));
+  }
+
+  function tiersCard() {
+    const rule = (t) => t === 3 ? `${fa(1)} تا ${fa(info.gold_max)} حدس`
+      : t === 2 ? `${fa(info.gold_max + 1)} تا ${fa(info.silver_max)} حدس` : "حتی اگه پیدا نکنی";
+    return el("div", { class: "bf-tiers" }, info.tiers.map((t) =>
+      el("div", { class: `bf-tier t${t.tier}` }, el("i", {}, TIER_ICON[t.tier]), el("b", {}, t.name),
+        el("small", {}, rule(t.tier)), el("em", {}, t.labels.map(shortLabel).join("، ")))));
+  }
+
+  function eventStrip() {
+    const strip = el("div", { class: "bf-strip" });
+    if (info.ends_at) {
+      const clock = el("b");
+      const upd = () => {
+        const left = msLeft(info.ends_at);
+        const t = hms(left);
+        clock.replaceChildren(t.d ? `${fa(t.d)} روز و ` : "",
+          el("span", { class: "ltr-time" }, fa(`${pad(t.h)}:${pad(t.m)}:${pad(t.s)}`)));
+        if (left <= 0) { clearInterval(timer); clock.textContent = "تمام شد"; }
+      };
+      const timer = setInterval(upd, 1000);
+      upd();
+      strip.append(el("div", { class: "bf-count" }, el("span", {}, "⏳ تا پایان جمعه سیاه"), clock));
+    }
+    const badges = el("div", { class: "bf-badges" });
+    strip.append(badges);
+    paintBadges(badges, info.limited, info.golden && info.golden.now);
+    return { strip, badges };
+  }
+
+  function paintBadges(badges, limited, goldenNow) {
+    const g = info.golden;
+    const items = [];
+    if (g) {
+      items.push(goldenNow
+        ? el("span", { class: "bf-badge hot" }, `🔥 ساعت طلایی! شانس جایزه‌های بزرگ ${fa(g.boost)} برابر`)
+        : el("span", { class: "bf-badge" }, `⏰ ساعت طلایی: هر شب ${fa(g.from)} تا ${fa(g.to)}`));
+    }
+    for (const l of limited || []) {
+      items.push(l.left > 0
+        ? el("span", { class: "bf-badge" }, `🏆 فقط ${fa(l.left)} تا ${shortLabel(l.label)} مونده`)
+        : el("span", { class: "bf-badge off" }, `${shortLabel(l.label)} تموم شد`));
+    }
+    badges.replaceChildren(...items);
+  }
+
+  // last winners scrolling under the game, refreshed every 20 s (also refreshes stock and golden hour)
+  function winnersTicker(badges) {
+    const track = el("div", { class: "bf-ticker-track" });
+    const box = el("div", { class: "bf-ticker hidden" }, track);
+    const ago = (s) => s < 60 ? "همین الان" : s < 3600 ? `${fa(Math.floor(s / 60))} دقیقه پیش` : `${fa(Math.floor(s / 3600))} ساعت پیش`;
+    async function load() {
+      if (!document.body.contains(box)) return clearInterval(timer);
+      try {
+        const w = await api(`/api/games/${encodeURIComponent(slug)}/winners`);
+        if (badges) paintBadges(badges, w.limited, w.golden_now);
+        if (!w.winners.length) return;
+        track.replaceChildren(...w.winners.map((x) =>
+          el("span", {}, "🎉 ", el("span", { class: "m" }, fa(x.mobile)), " ", el("b", {}, x.prize), " برد · ", ago(x.ago))));
+        track.style.setProperty("--dur", `${Math.max(18, w.winners.length * 5)}s`);
+        box.classList.remove("hidden");
+      } catch (e) { /* the ticker is decoration only */ }
+    }
+    const timer = setInterval(load, 20000);
+    setTimeout(load, 50);  // after the box is on the page (load stops the timer once the box is gone)
+    return box;
+  }
+
+  function renderVaultTeaser() {
+    const units = [["d", "روز"], ["h", "ساعت"], ["m", "دقیقه"], ["s", "ثانیه"]];
+    const cells = Object.fromEntries(units.map(([k]) => [k, el("b")]));
+    const upd = () => {
+      const left = msLeft(info.starts_at);
+      if (left <= 0) { clearInterval(timer); location.reload(); return; }
+      const t = hms(left);
+      for (const [k] of units) cells[k].textContent = fa(pad(t[k]));
+    };
+    const timer = setInterval(upd, 1000);
+    upd();
+    app.replaceChildren(el("div", { class: "bf-teaser" },
+      el("div", { class: "big" }, "🔐"),
+      el("h3", {}, "گاوصندوق‌های جمعه سیاه به‌زودی باز می‌شن!"),
+      el("p", {}, `از ${jalaliDate(info.starts_at, true)} بیا رمز گاوصندوق رو پیدا کن و تا ۹۰٪ تخفیف ببر.`),
+      el("div", { class: "bf-clock" }, units.map(([k, label]) => el("div", {}, cells[k], el("small", {}, label))).reverse()),
+      el("div", { style: "margin-top:18px" }, tiersCard()),
+      el("a", { class: "btn outline", href: "/" }, "تا اون موقع بقیه‌ی بازی‌ها رو امتحان کن")));
+  }
+
+  function renderVault() {
+    const { strip, badges } = eventStrip();
+    const input = mobileField("mobile");
+    const box = errorBox();
+    const button = el("button", { class: "btn", type: "button" }, "رمز رو حدس بزن 🔐");
+    const intro = el("p", { class: "bf-intro" },
+      `رمز گاوصندوق ${fa(info.digits)} رقمه و هیچ رقمی تکرار نمی‌شه. ${fa(info.max_guesses)} حدس داری؛ سبز یعنی رقم درست سر جای درست، زرد یعنی این رقم هست ولی جای دیگه. هرچی زودتر پیدا کنی، گاوصندوق بهتری باز می‌کنی!`);
+    app.replaceChildren(strip, vaultBox(3), intro, tiersCard(), input, button, box, pastResult() || "", winnersTicker(badges));
+    button.addEventListener("click", async () => {
+      sfx.tap();
+      const got = await start(input.querySelector("input"), box, button, `/api/games/${slug}/vault/start`);
+      if (!got) return;
+      if (wallet && typeof got.res.chances === "number") showWallet({ chances: got.res.chances });
+      runVault(got.res, got.mobile);
+    });
+  }
+
+  function runVault(run, mobile) {
+    const D = run.digits;
+    let row = 0, current = "", busy = false, over = false, turn = 0;
+    const tiles = [];
+    const grid = el("div", { class: "vgrid" });
+    for (let r = 0; r < run.max_guesses; r++) {
+      tiles.push([]);
+      for (let c = 0; c < D; c++) {
+        const t = el("div", { class: "vtile" });
+        tiles[r].push(t);
+        grid.append(t);
+      }
+    }
+    const vault = vaultBox(3);
+    const dial = vault.querySelector(".vault-dial");
+    const keys = {};
+    const digitKey = (d) => (keys[d] = el("button", { type: "button", class: "vkey", onclick: () => type(d) }, d));
+    const kb = el("div", { class: "vkeys" },
+      ..."12345".split("").map(digitKey), ..."67890".split("").map(digitKey),
+      el("button", { type: "button", class: "vkey wide", onclick: submit }, "تأیید"),
+      el("button", { type: "button", class: "vkey back", onclick: back, "aria-label": "پاک کردن" }, "⌫ پاک کن"));
+    const counter = el("b");
+    const msg = el("p", { class: "vmsg" }, "یه رمز ۴ رقمی بزن.");
+    app.replaceChildren(vault,
+      el("div", { class: "vhead" }, el("span", {}, `رمز ${fa(D)} رقمی · رقم تکراری نداره`), el("span", {}, "حدس: ", counter)),
+      grid, msg, kb);
+    const count = () => { counter.textContent = `${fa(Math.min(row + 1, run.max_guesses))}/${fa(run.max_guesses)}`; };
+    count();
+
+    const toLatin = (k) => "۰۱۲۳۴۵۶۷۸۹".indexOf(k) >= 0 ? String("۰۱۲۳۴۵۶۷۸۹".indexOf(k)) : k;
+    const onKey = (e) => {
+      if (over || e.ctrlKey || e.metaKey || e.altKey) return;
+      const k = toLatin(e.key);
+      // preventDefault: Enter must not also "click" the last tapped on-screen key
+      if (e.key === "Enter") { e.preventDefault(); submit(); }
+      else if (e.key === "Backspace") { e.preventDefault(); back(); }
+      else if (/^\d$/.test(k)) { e.preventDefault(); type(k); }
+    };
+    document.addEventListener("keydown", onKey);
+
+    function paint() {
+      tiles[row].forEach((t, i) => { t.textContent = current[i] || ""; t.classList.toggle("filled", !!current[i]); });
+    }
+    function type(d) {
+      if (busy || over || current.length >= D) return;
+      if (current.includes(d)) {
+        msg.textContent = "هر رقم فقط یه بار توی رمز هست.";
+        sfx.bad();
+        return;
+      }
+      current += d;
+      turn += 1;
+      dial.style.transform = `rotate(${turn * 36}deg)`;
+      sfx.dial();
+      paint();
+    }
+    function back() {
+      if (busy || over) return;
+      current = current.slice(0, -1);
+      paint();
+    }
+    async function submit() {
+      if (busy || over) return;
+      if (current.length < D) {
+        msg.textContent = `رمز باید ${fa(D)} رقم باشه.`;
+        sfx.bad();
+        grid.classList.add("nudge");
+        setTimeout(() => grid.classList.remove("nudge"), 400);
+        return;
+      }
+      busy = true;
+      msg.textContent = "";
+      let res;
+      try {
+        res = await api(`/api/games/${slug}/vault/guess`, { method: "POST", body: { token: run.token, guess: current } });
+      } catch (e) {
+        msg.textContent = e.message;
+        busy = false;
+        return;
+      }
+      const order = { absent: 0, present: 1, correct: 2 };
+      res.feedback.forEach((f, i) => setTimeout(() => {
+        tiles[row][i].classList.add("flip", f);
+        sfx.flip();
+        const k = keys[current[i]];
+        if (k && (order[f] > (order[k.dataset.state] ?? -1))) { k.dataset.state = f; k.className = `vkey ${f}`; }
+      }, i * 220));
+      setTimeout(() => {
+        if (res.done) {
+          over = true;
+          document.removeEventListener("keydown", onKey);
+          if (res.solved) sfx.good();
+          remember(res, mobile);
+          setTimeout(() => openVault(res, mobile), res.solved ? 500 : 250);
+        } else {
+          row += 1;
+          current = "";
+          busy = false;
+          count();
+          const left = run.max_guesses - row;
+          msg.textContent = row === info.gold_max ? `${fa(left)} حدس دیگه داری؛ از اینجا به بعد گاوصندوق نقره‌ای!`
+            : row === info.silver_max ? "آخرین حدس! پیدا نکنی هم گاوصندوق برنزی مال توئه."
+            : `${fa(left)} حدس دیگه داری.`;
+        }
+      }, D * 220 + 250);
+    }
+  }
+
+  function openVault(res, mobile) {
+    const vault = vaultBox(res.tier);
+    vault.style.width = "min(240px, 72%)";
+    vault.querySelector(".vault-prize").append(
+      res.result === "won" ? shortLabel(res.prize_label) : "🙂", el("small", {}, `گاوصندوق ${res.tier_name || ""}`));
+    const title = el("p", { class: "vmsg", style: "font-size:15px;color:#fff;font-weight:700" },
+      res.solved ? `رمز رو در ${fa(res.guesses)} حدس پیدا کردی! گاوصندوق ${res.tier_name} داره باز می‌شه…`
+        : `رمز ${fa(res.answer || "")} بود. گاوصندوق ${res.tier_name || "برنزی"} داره باز می‌شه…`);
+    app.replaceChildren(vault, title, res.golden ? el("p", { class: "vmsg" }, "🔥 ساعت طلایی بود؛ شانس جایزه‌ی بزرگ بیشتر بود!") : "");
+    const reduced = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const dial = vault.querySelector(".vault-dial");
+    vault.classList.add("shake");
+    const clicks = setInterval(() => sfx.dial(), 110);
+    setTimeout(() => { vault.classList.remove("shake"); dial.style.transform = "rotate(-540deg)"; }, reduced ? 100 : 700);
+    setTimeout(() => { clearInterval(clicks); sfx.unlock(); vault.classList.add("open"); }, reduced ? 300 : 1400);
+    setTimeout(() => {
+      showResult({ ...res, mobile });
+      renderVault();
+    }, reduced ? 900 : 2700);
+  }
+
   // ------------------------------------------------------------ result
 
   function percentOf(label) {
@@ -716,6 +981,13 @@
   }
 
   function scorePill(res) {
+    if (res.tier_name) {  // Black Friday vault
+      return el("div", {},
+        el("div", { class: "pill" }, `${TIER_ICON[res.tier]} گاوصندوق ${res.tier_name}`),
+        el("p", { class: "muted" }, res.solved ? `رمز ${fa(res.answer)} رو در ${fa(res.guesses)} حدس پیدا کردی.`
+          : `رمز ${fa(res.answer)} بود.`),
+        res.earned_tier > res.tier ? el("p", { class: "muted" }, "جایزه‌های گاوصندوق بالاتر تموم شده بود؛ این یکی برات باز شد.") : "");
+    }
     if (res.answer) {  // hidden word
       return el("div", {},
         el("div", { class: "pill" }, res.solved ? `پیدا شد در ${fa(res.guesses)} حدس` : "این بار پیدا نشد"),

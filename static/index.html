@@ -26,14 +26,17 @@
   <script src="/static/js/otp.js"></script>
   <script>
     (async () => {
-      const { api, el } = window.ZG;
+      const { api, el, jalaliDate } = window.ZG;
       const list = document.getElementById("list");
-      const icons = { wheel: "🎡", scratch: "🎟️", quiz: "🔤", chest: "🎁", slot: "🎰", wordle: "🧩" };
+      const icons = { wheel: "🎡", scratch: "🎟️", quiz: "🔤", chest: "🎁", slot: "🎰", wordle: "🧩", vault: "🔐" };
       try {
         const { games } = await api("/api/games");
         list.replaceChildren(...(games.length ? games.map((g) =>
           el("a", { class: `game-link kind-${g.kind}`, href: `/g/${encodeURIComponent(g.slug)}` },
+            g.kind === "vault" ? el("span", { class: "tag" }, "BLACK FRIDAY") : "",
             el("b", {}, g.title), el("span", {}, g.subtitle),
+            g.soon ? el("span", { class: "soon" }, `به‌زودی · شروع ${jalaliDate(g.starts_at, true)}`)
+              : g.kind === "vault" && g.ends_at ? el("span", { class: "soon" }, `فقط تا ${jalaliDate(g.ends_at)}`) : "",
             el("i", { class: "icon", "aria-hidden": "true" }, icons[g.kind] || "🎁"))) :
           [el("div", { class: "card closed" }, "فعلاً بازی فعالی نداریم. به‌زودی برمی‌گردیم!")]));
       } catch (e) {

@@ -11,7 +11,7 @@ SCHEMA = """
 CREATE TABLE IF NOT EXISTS games (
     id INTEGER PRIMARY KEY,
     slug TEXT NOT NULL UNIQUE,
-    kind TEXT NOT NULL,                 -- wheel | scratch | quiz
+    kind TEXT NOT NULL,                 -- wheel | scratch | chest | slot | quiz | wordle | vault
     title TEXT NOT NULL,
     subtitle TEXT NOT NULL DEFAULT '',
     rules TEXT NOT NULL DEFAULT '',
@@ -251,6 +251,23 @@ SEED_GAMES = [
             ("night", "شب", []), ("friend", "دوست", []),
         ],
     },
+    {
+        # Black Friday event: on by itself between starts_at and ends_at (Tehran), "coming soon" page before
+        "slug": "black-friday",
+        "kind": "vault",
+        "title": "گاوصندوق جمعه سیاه",
+        "subtitle": "رمز گاوصندوق رو پیدا کن؛ هرچی زودتر، گاوصندوق بهتر!",
+        "rules": "یک شانس، ۶ حدس برای رمز ۴ رقمی (رقم‌ها تکراری نیستند). سبز یعنی رقم درست سر جای درست، زرد یعنی "
+                 "این رقم در رمز هست ولی جای دیگر. در ۱ تا ۳ حدس گاوصندوق طلایی (۵۰ تا ۹۰٪)، در ۴ یا ۵ حدس "
+                 "گاوصندوق نقره‌ای (۳۰ تا ۵۰٪) و در هر صورت حداقل گاوصندوق برنزی (۲۰ یا ۳۰٪). "
+                 "در ساعت طلایی شانس جایزه‌های بزرگ دو برابر است.",
+        "enabled": 1,
+        "starts_at": "2026-11-23T00:00",   # 2 Azar 1405
+        "ends_at": "2026-11-29T23:59",     # 8 Azar 1405
+        "settings": {"color": "#FFC53D", "teaser": True, "gold_max": 3, "silver_max": 5,
+                     "golden_from": 20, "golden_to": 22, "golden_boost": 2,
+                     "bonus_date": "2026-11-27", "bonus_chances": 1},   # Friday 6 Azar: one extra chance
+    },
 ]
 
 
@@ -263,10 +280,10 @@ def add_missing_games(conn: sqlite3.Connection) -> None:
 def seed(conn: sqlite3.Connection, games: list[dict] | None = None) -> None:
     for g in SEED_GAMES if games is None else games:
         cur = conn.execute(
-            "INSERT INTO games (slug, kind, title, subtitle, rules, enabled, plays_per_mobile, period_days,"
-            " code_valid_days, settings, created_at) VALUES (?,?,?,?,?,0,1,0,7,?,?)",
-            (g["slug"], g["kind"], g["title"], g["subtitle"], g["rules"],
-             json.dumps(g.get("settings", {}), ensure_ascii=False), now_iso()),
+            "INSERT INTO games (slug, kind, title, subtitle, rules, enabled, starts_at, ends_at, plays_per_mobile,"
+            " period_days, code_valid_days, settings, created_at) VALUES (?,?,?,?,?,?,?,?,1,0,7,?,?)",
+            (g["slug"], g["kind"], g["title"], g["subtitle"], g["rules"], g.get("enabled", 0),
+             g.get("starts_at"), g.get("ends_at"), json.dumps(g.get("settings", {}), ensure_ascii=False), now_iso()),
         )
         game_id = cur.lastrowid
         for word, answer, wrong in g.get("questions", []):
@@ -295,6 +312,26 @@ QUIZ_PLAN = [("۱۰٪ تخفیف", 10, 0), ("۲۰٪ تخفیف", 20, 2), ("۳۰�
 # hidden word: (label, percent, score); score = 7 - guesses used when solved, 0 when not solved
 WORDLE_PLAN = [("۱۰٪ تخفیف", 10, 0), ("۲۰٪ تخفیف", 20, 2), ("۳۰٪ تخفیف", 30, 3), ("۴۰٪ تخفیف", 40, 4),
                ("۵۰٪ تخفیف", 50, 5)]
+# vault (Black Friday): (label, percent, tier 1 bronze / 2 silver / 3 gold, weight within the tier, stock, colour)
+VAULT_PLAN = [
+    ("۲۰٪ تخفیف", 20, 1, 80, None, "#CD7F32"),
+    ("۳۰٪ تخفیف", 30, 1, 20, None, "#CD7F32"),
+    ("۳۰٪ تخفیف", 30, 2, 60, None, "#C0C0C0"),
+    ("۴۰٪ تخفیف", 40, 2, 30, None, "#C0C0C0"),
+    ("۵۰٪ تخفیف", 50, 2, 10, None, "#C0C0C0"),
+    ("۵۰٪ تخفیف", 50, 3, 70, None, "#FFC53D"),
+    ("۷۰٪ تخفیف", 70, 3, 28, None, "#FFC53D"),
+    ("۹۰٪ تخفیف", 90, 3, 2, 10, "#FFC53D"),
+]
+
+
+def insert_vault_plan(conn: sqlite3.Connection, game_id: int) -> None:
+    for i, (label, pct, tier, weight, stock, color) in enumerate(VAULT_PLAN):
+        conn.execute("INSERT INTO prizes (game_id, label, kind, amount, max_amount, weight, stock, min_score, color,"
+                     " sort) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                     (game_id, label, "percentage", pct, NO_CAP, weight, stock, tier, color, i))
+
+
 OLD_RULES = {'wheel': 'هر شماره موبایل یک بار می\u200cتونه بچرخونه. کد تخفیف روی همون شماره در زبانیاد فعال می\u200cشه.', 'scratch': 'هر شماره موبایل یک بار می\u200cتونه کارت رو بخراشه.', 'words': '۵ کلمه، ۶۰ ثانیه. با ۳ جواب درست ۱۰٪، با ۴ جواب ۱۵٪ و با ۵ جواب ۲۵٪ تخفیف می\u200cگیری.'}
 NEW_RULES = {'wheel': 'هر چرخش یک شانس مصرف می\u200cکند. همه برنده\u200cاند: از ۱۰٪ تا ۹۰٪ تخفیف! کد روی همان شماره در زبانیاد فعال می\u200cشود.', 'scratch': 'هر کارت یک شانس مصرف می\u200cکند. همه برنده\u200cاند: از ۱۰٪ تا ۹۰٪ تخفیف!', 'words': '۵ کلمه، ۶۰ ثانیه، یک شانس. ۰ تا ۱ جواب درست ۱۰٪، ۲ جواب ۲۰٪، ۳ جواب ۳۰٪، ۴ جواب ۴۰٪ و ۵ جواب ۵۰٪ تخفیف.'}
 
@@ -314,7 +351,10 @@ def apply_prize_plan(conn: sqlite3.Connection) -> None:
     try:
         for g in todo:
             conn.execute("UPDATE prizes SET deleted=1, active=0 WHERE game_id=?", (g["id"],))
-            if g["kind"] in ("quiz", "wordle"):
+            if g["kind"] == "vault":
+                insert_vault_plan(conn, g["id"])
+                rows = []
+            elif g["kind"] in ("quiz", "wordle"):
                 plan = QUIZ_PLAN if g["kind"] == "quiz" else WORDLE_PLAN
                 rows = [(label, pct, 1, score, DEFAULT_COLORS[i % len(DEFAULT_COLORS)])
                         for i, (label, pct, score) in enumerate(plan)]

@@ -9,7 +9,8 @@ from datetime import datetime, timedelta
 
 from . import config, db, discount, wallet
 from .errors import PlayError  # noqa: F401  (re-exported: games.PlayError)
-from .util import code_validity, local_day_start_utc, local_now, now_iso, parse_local, utcnow
+from .util import (code_validity, latin_digits, local_day_start_utc, local_now, mask_mobile, now_iso, parse_local,
+                   utcnow)
 
 RNG = random.SystemRandom()
 QUIZ_GRACE_SECONDS = 10
@@ -17,6 +18,10 @@ CHANCE_KINDS = ("wheel", "scratch", "chest", "slot")   # result drawn by weight
 SCORED_KINDS = ("quiz", "wordle")                       # result from the player's score (prize.min_score)
 WORDLE_MAX_GUESSES = 6
 WORDLE_MINUTES = 10
+VAULT_DIGITS = 4
+VAULT_MAX_GUESSES = 6
+VAULT_MINUTES = 10
+VAULT_TIERS = {1: "برنزی", 2: "نقره‌ای", 3: "طلایی"}   # prize.min_score = the tier it belongs to
 
 
 # ---------------------------------------------------------------- loading
@@ -64,6 +69,8 @@ def public_view(conn, game: dict) -> dict:
     }
     if game["kind"] == "wordle":
         view["max_guesses"] = WORDLE_MAX_GUESSES
+    if game["kind"] == "vault":
+        return {**view, **vault_view(conn, game, prizes)}
     if game["kind"] == "quiz":
         view["question_count"] = quiz_count(conn, game)
         view["time_limit"] = int(game["settings"].get("time_limit", 60))
@@ -352,6 +359,154 @@ def wordle_guess(conn, slug: str, token: str, guess: str) -> dict:
     out = _finish_scored(conn, game, play, score,
                          {"late": late, "solved": solved, "guesses": len(guesses), "answer": word, "meaning": q["answer"]})
     return {"feedback": feedback, "done": True, **out}
+
+
+# ---------------------------------------------------------------- Black Friday vault (crack a 4-digit code, then open a tier)
+
+
+def _setting_int(game: dict, key: str, default: int, lo: int, hi: int) -> int:
+    try:
+        return max(lo, min(hi, int(game["settings"].get(key, default))))
+    except (TypeError, ValueError):
+        return default
+
+
+def golden_hours(game: dict) -> tuple[int, int, int]:
+    """(from hour, to hour, weight multiplier); multiplier 1 = no golden hour."""
+    return (_setting_int(game, "golden_from", 20, 0, 23), _setting_int(game, "golden_to", 22, 0, 24),
+            _setting_int(game, "golden_boost", 1, 1, 10))
+
+
+def golden_now(game: dict, now=None) -> bool:
+    start, end, boost = golden_hours(game)
+    hour = (now or local_now()).hour
+    return boost > 1 and start < end and start <= hour < end
+
+
+def vault_tier(game: dict, solved: bool, guesses: int) -> int:
+    if solved and guesses <= _setting_int(game, "gold_max", 3, 1, VAULT_MAX_GUESSES):
+        return 3
+    if solved and guesses <= _setting_int(game, "silver_max", 5, 1, VAULT_MAX_GUESSES):
+        return 2
+    return 1
+
+
+def _limited(prizes: list[dict]) -> list[dict]:
+    return [{"label": p["label"], "tier": p["min_score"], "left": max(p["stock"] - p["given"], 0)}
+            for p in prizes if p["stock"] is not None and p["kind"] != "none"]
+
+
+def vault_view(conn, game: dict, prizes: list[dict]) -> dict:
+    start, end, boost = golden_hours(game)
+    tiers = []
+    for tier in sorted(VAULT_TIERS, reverse=True):
+        labels = []
+        for p in prizes:
+            if p["min_score"] == tier and p["kind"] != "none" and p["label"] not in labels:
+                labels.append(p["label"])
+        tiers.append({"tier": tier, "name": VAULT_TIERS[tier], "labels": labels})
+    return {
+        "digits": VAULT_DIGITS, "max_guesses": VAULT_MAX_GUESSES, "tiers": tiers,
+        "gold_max": _setting_int(game, "gold_max", 3, 1, VAULT_MAX_GUESSES),
+        "silver_max": _setting_int(game, "silver_max", 5, 1, VAULT_MAX_GUESSES),
+        "limited": _limited(prizes),
+        "golden": {"from": start, "to": end, "boost": boost, "now": golden_now(game)} if boost > 1 else None,
+        "starts_at": game["starts_at"], "teaser": bool(game["settings"].get("teaser", True)),
+        "server_now": local_now().strftime("%Y-%m-%dT%H:%M:%S"),
+    }
+
+
+def recent_winners(conn, game: dict, limit: int = 12) -> dict:
+    rows = conn.execute("SELECT mobile, prize_label, finished_at FROM plays WHERE game_id=? AND status='won'"
+                        " ORDER BY id DESC LIMIT ?", (game["id"], limit)).fetchall()
+    now = utcnow()
+    winners = [{"mobile": mask_mobile(r["mobile"]), "prize": r["prize_label"],
+                "ago": int((now - datetime.fromisoformat(r["finished_at"])).total_seconds()) if r["finished_at"] else 0}
+               for r in rows]
+    return {"winners": winners, "limited": _limited(prizes_of(conn, game["id"])),
+            "golden_now": golden_now(game) if game["kind"] == "vault" else False}
+
+
+def vault_start(conn, slug: str, mobile: str, ip: str) -> dict:
+    game = get_game(conn, slug)
+    if game["kind"] != "vault":
+        raise PlayError("bad_game", "این بازی گاوصندوق نیست.")
+    code = "".join(RNG.sample("0123456789", VAULT_DIGITS))
+    token = secrets.token_urlsafe(24)
+    with db.LOCK, db.transaction(conn):
+        _check_limits(conn, game, mobile, ip)
+        wallet.spend(conn, mobile)
+        _new_play(conn, game, mobile, ip, None, token=token, total=VAULT_MAX_GUESSES,
+                  data={"code": code, "guesses": []})
+    return {"token": token, "digits": VAULT_DIGITS, "max_guesses": VAULT_MAX_GUESSES,
+            "chances": wallet.chances(conn, mobile)}
+
+
+def vault_guess(conn, slug: str, token: str, guess: str) -> dict:
+    game = get_game(conn, slug)
+    play = db.row(conn.execute("SELECT * FROM plays WHERE token=? AND game_id=?", (token, game["id"])).fetchone())
+    if not play:
+        raise PlayError("bad_token", "این دست بازی پیدا نشد. صفحه را دوباره باز کنید.", 404)
+    if play["status"] != "pending":
+        raise PlayError("finished", "این دست قبلاً تمام شده.", 409)
+    guess = latin_digits(guess or "").strip()
+    if len(guess) != VAULT_DIGITS or not guess.isdigit() or not guess.isascii():
+        raise PlayError("bad_guess", f"یک رمز {VAULT_DIGITS} رقمی بنویسید.")
+    code = play["data"]["code"]
+
+    late = (utcnow() - datetime.fromisoformat(play["created_at"])).total_seconds() > VAULT_MINUTES * 60
+    with db.LOCK, db.transaction(conn):
+        fresh = db.row(conn.execute("SELECT status, data FROM plays WHERE id=?", (play["id"],)).fetchone())
+        if fresh["status"] != "pending":
+            raise PlayError("finished", "این دست قبلاً تمام شده.", 409)
+        guesses = fresh["data"]["guesses"] + ([] if late else [guess])
+        conn.execute("UPDATE plays SET data=? WHERE id=?",
+                     (json.dumps({**fresh["data"], "guesses": guesses}), play["id"]))
+    feedback = wordle_feedback(code, guess)
+    solved = not late and guess == code
+    if not (solved or late or len(guesses) >= VAULT_MAX_GUESSES):
+        return {"feedback": feedback, "done": False, "guesses": len(guesses)}
+    tier = vault_tier(game, solved, len(guesses))
+    out = _finish_vault(conn, game, play, tier,
+                        {"late": late, "solved": solved, "guesses": len(guesses), "answer": code})
+    return {"feedback": feedback, "done": True, **out}
+
+
+def _finish_vault(conn, game: dict, play: dict, tier: int, extra: dict) -> dict:
+    """Opens the earned vault: a weighted draw among that tier's prizes (big ones boosted in the golden hour).
+    A tier with nothing left in stock falls back to the tier below, then to any prize left."""
+    prizes = prizes_of(conn, game["id"])
+    golden = golden_now(game)
+    boost = golden_hours(game)[2] if golden else 1
+    with db.LOCK, db.transaction(conn):
+        fresh = conn.execute("SELECT status FROM plays WHERE id=?", (play["id"],)).fetchone()
+        if fresh["status"] != "pending":
+            raise PlayError("finished", "این دست قبلاً تمام شده.", 409)
+        usable = _usable(conn, game, prizes)
+        prize, opened = None, tier
+        for t in [*range(tier, 0, -1), *range(tier + 1, 4)]:
+            pool = [dict(p) for p in usable if p["min_score"] == t and p["weight"] > 0]
+            if not pool:
+                continue
+            smallest = min(p["amount"] for p in pool)
+            for p in pool:  # golden hour: everything above the tier's smallest prize is `boost` times likelier
+                if p["amount"] > smallest:
+                    p["weight"] *= boost
+            prize, opened = draw(pool), t
+            break
+        if prize:
+            _reserve(conn, prize)
+        conn.execute("UPDATE plays SET score=?, prize_id=?, prize_label=? WHERE id=?",
+                     (tier, prize["id"] if prize else None, prize["label"] if prize else "", play["id"]))
+        if not prize:
+            conn.execute("UPDATE plays SET status='lost', finished_at=? WHERE id=?", (now_iso(), play["id"]))
+
+    result = {"tier": opened, "earned_tier": tier, "tier_name": VAULT_TIERS[opened], "golden": golden,
+              "score": tier, "total": 3, **extra}
+    if not prize:
+        return {**result, "result": "lost", "prize_label": "", "chances": wallet.chances(conn, play["mobile"])}
+    outcome = _issue(conn, game, play["id"], prize, play["mobile"])
+    return {**result, **outcome, "prize_label": prize["label"], "chances": wallet.chances(conn, play["mobile"])}
 
 
 def expire_stale(conn) -> None:

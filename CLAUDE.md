@@ -1,6 +1,6 @@
 # Zabanyad discount games — notes for Claude Code
 
-Six games: wheel of fortune, scratch card, chest (pick 1 of 3), slot machine, English word quiz, hidden word (Wordle-style) that give Zabanyad users a real discount code
+Seven games: wheel of fortune, scratch card, chest (pick 1 of 3), slot machine, English word quiz, hidden word (Wordle-style), Black Friday vault that give Zabanyad users a real discount code
 when they win. Owner is non-technical: reply in Persian, plain words. All UI text Persian, RTL, Persian digits
 (`ZG.fa`), Jalali dates (`ZG.jalaliDate`).
 
@@ -59,6 +59,19 @@ Out of chances → bottom sheet pushing the invite (when referrals are on) + lin
 - Sounds: `static/js/sound.js` (Web Audio, generated; `ZG.sfx.*`, mute in header, `zg:muted`). Header shows the
   signed-in mobile + «خروج» + mute (`otp.js renderHeader`). «وارد کردن کد در زبانیاد» → `CODE_URL`
   (default https://zabanyad.com/install; owner said he'd confirm the address).
+
+## Black Friday vault (v8, kind=vault, slug black-friday; owner approved the scenario)
+- Crack a 4-digit code (distinct digits, 6 guesses, 10 min; server holds it, feedback = `wordle_feedback`) → tier:
+  solved ≤ gold_max (3) gold, ≤ silver_max (5) silver, else bronze (never empty). prize.min_score = tier (1/2/3); the prize
+  is a weighted draw inside the tier (`games._finish_vault`); a sold-out tier falls back to the tier below.
+  Plan `db.VAULT_PLAN`: bronze 20%(80)/30%(20); silver 30%(60)/40%(30)/50%(10); gold 50%(70)/70%(28)/90%(2, stock 10).
+- Event: seeded ENABLED with starts_at 2026-11-23 00:00 (2 Azar) / ends_at 2026-11-29 23:59 (8 Azar); before the start the
+  home card says «به‌زودی» and the game page shows a countdown (`settings.teaser`). Golden hour 20–22 (`golden_from/to`):
+  every prize above the tier's smallest gets ×`golden_boost` (2). `bonus_date` 2026-11-27 (Friday 6 Azar) +`bonus_chances` 1
+  added to that day's chance (`wallet.bonus_today`). Live winners ticker + stock badges: `GET /api/games/{slug}/winners`.
+  API: `/vault/start`, `/vault/guess`. Page: dark/gold `.theme-bf` (game.css), `renderVault` in play.js, sfx dial/unlock.
+  Panel: tier select per prize, «تنظیمات جمعه سیاه» card. Not answered by the owner yet (defaults used): dates, 90% stock,
+  whether game codes stack with Zabanyad's own Black Friday discount (ask the backend team).
 
 ## Prizes and chances (owner-approved plan, v5)
 - Wheel/scratch (6 slices, NO "empty" prize, min 10%): weights per 1000 → 10%:500, 20%:280, 30%:140, 40%:60,

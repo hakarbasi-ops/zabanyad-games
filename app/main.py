@@ -81,10 +81,15 @@ def health():
 def list_open_games():
     with db.session() as conn:
         out = []
+        now = local_now()
         for g in db.rows(conn.execute("SELECT * FROM games WHERE enabled=1 ORDER BY id")):
             ok, _ = games.availability(g)
-            if ok:
-                out.append({"slug": g["slug"], "kind": g["kind"], "title": g["title"], "subtitle": g["subtitle"]})
+            start = games.parse_local(g["starts_at"])
+            soon = not ok and g["kind"] == "vault" and g["settings"].get("teaser", True) and start and now < start
+            if ok or soon:
+                out.append({"slug": g["slug"], "kind": g["kind"], "title": g["title"], "subtitle": g["subtitle"],
+                            "soon": bool(soon), "starts_at": g["starts_at"], "ends_at": g["ends_at"]})
+        out.sort(key=lambda g: g["kind"] != "vault")  # the event game first
         return {"games": out, "shop_url": config.CODE_URL}
 
 
@@ -181,6 +186,20 @@ def wordle_start(slug: str, body: MobileIn, request: Request):
         return games.wordle_start(conn, slug, mobile, admin.client_ip(request))
 
 
+@app.get("/api/games/{slug}/winners")
+def winners(slug: str):
+    with db.session() as conn:
+        return games.recent_winners(conn, games.get_game(conn, slug))
+
+
+@app.post("/api/games/{slug}/vault/start")
+def vault_start(slug: str, body: MobileIn, request: Request):
+    mobile = _mobile(body.mobile)
+    otp.check(mobile, body.otp_token)
+    with db.session() as conn:
+        return games.vault_start(conn, slug, mobile, admin.client_ip(request))
+
+
 class GuessIn(BaseModel):
     token: str
     guess: str
@@ -190,6 +209,12 @@ class GuessIn(BaseModel):
 def wordle_guess(slug: str, body: GuessIn):
     with db.session() as conn:
         return games.wordle_guess(conn, slug, body.token, body.guess)
+
+
+@app.post("/api/games/{slug}/vault/guess")
+def vault_guess(slug: str, body: GuessIn):
+    with db.session() as conn:
+        return games.vault_guess(conn, slug, body.token, body.guess)
 
 
 class QuizFinishIn(BaseModel):

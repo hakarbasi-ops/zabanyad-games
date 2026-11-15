@@ -2,8 +2,8 @@
 (function () {
   const { fa, money, jalaliDate, api, el, copy } = window.ZG;
   const root = document.getElementById("root");
-  const KIND = { wheel: "گردونه شانس", scratch: "کارت خراشی", chest: "صندوق شانس", slot: "ماشین شانس", quiz: "چالش کلمه", wordle: "کلمه‌ی مخفی" };
-  const ICON = { wheel: "🎡", scratch: "🎟️", chest: "🎁", slot: "🎰", quiz: "🔤", wordle: "🧩" };
+  const KIND = { wheel: "گردونه شانس", scratch: "کارت خراشی", chest: "صندوق شانس", slot: "ماشین شانس", quiz: "چالش کلمه", wordle: "کلمه‌ی مخفی", vault: "گاوصندوق (جمعه سیاه)" };
+  const ICON = { wheel: "🎡", scratch: "🎟️", chest: "🎁", slot: "🎰", quiz: "🔤", wordle: "🧩", vault: "🔐" };
   const PRIZE_KIND = { percentage: "درصدی", amount: "مبلغی (ریال)", none: "بدون جایزه" };
   const STATUS = {
     won: ["برنده", "ok"], lost: ["بدون جایزه", "off"], need_signup: ["ثبت‌نام نکرده", "warn"],
@@ -202,6 +202,8 @@
     const isQuiz = game.kind === "quiz";
     const isWordle = game.kind === "wordle";
     const isScored = isQuiz || isWordle;    // prize by score (min_score) instead of chance weights
+    const isVault = game.kind === "vault";  // min_score = vault tier (1 bronze, 2 silver, 3 gold), weight within the tier
+    const TIERS = { 3: "🥇 طلایی", 2: "🥈 نقره‌ای", 1: "🥉 برنزی" };
     const url = `${location.origin}/g/${game.slug}`;
 
     const f = {};
@@ -218,6 +220,15 @@
     f.enabled = el("input", { type: "checkbox", checked: !!game.enabled });
     f.rules = el("textarea", {}, game.rules || "");
     f.color = el("input", { type: "color", value: game.settings.color || "#f26600" });
+    if (isVault) {
+      const st = game.settings;
+      const n = (key, def, attrs = {}) => (f[key] = el("input", { type: "number", value: st[key] ?? def, ...attrs }));
+      n("gold_max", 3, { min: 1, max: 6 }); n("silver_max", 5, { min: 1, max: 6 });
+      n("golden_from", 20, { min: 0, max: 23 }); n("golden_to", 22, { min: 1, max: 24 }); n("golden_boost", 2, { min: 1, max: 10 });
+      n("bonus_chances", 0, { min: 0, max: 10 });
+      f.bonus_date = el("input", { type: "date", value: st.bonus_date || "" });
+      f.teaser = el("input", { type: "checkbox", checked: st.teaser !== false });
+    }
     if (isQuiz) {
       f.question_count = el("input", { type: "number", min: 1, max: 20, value: game.settings.question_count || 5 });
       f.time_limit = el("input", { type: "number", min: 10, max: 600, value: game.settings.time_limit || 60 });
@@ -258,6 +269,8 @@
           el("td", {}, none ? "—" : rialField(p, "amount", p.kind === "amount")),
           el("td", {}, none ? "—" : rialField(p, "max_amount", true)),
           el("td", {}, none ? "—" : bind("usage_count", el("input", { type: "number", min: 1, value: p.usage_count, style: "width:70px" }), n)),
+          isVault ? el("td", {}, bind("min_score", el("select", {}, Object.entries(TIERS).map(([k, v]) =>
+            el("option", { value: k, selected: Number(p.min_score) === Number(k) }, v))), n)) : "",
           isScored
             ? el("td", {}, bind("min_score", el("input", { type: "number", min: 0, value: p.min_score, style: "width:70px" }), n))
             : el("td", {}, bind("weight", el("input", { type: "number", min: 0, value: p.weight, style: "width:80px" }), n)),
@@ -272,16 +285,20 @@
       updChances(total);
     }
     function updChances() {
-      const total = prizes.filter((p) => p.active).reduce((s, p) => s + (Number(p.weight) || 0), 0);
+      // vault: chance within its own vault (tier)
+      const totalOf = (q) => prizes.filter((p) => p.active && (!isVault || Number(p.min_score) === Number(q.min_score)))
+        .reduce((s, p) => s + (Number(p.weight) || 0), 0);
       for (const [cell, p] of chanceCells) {
+        const total = totalOf(p);
         cell.textContent = p.active && total ? `${fa(Math.round(((Number(p.weight) || 0) / total) * 1000) / 10)}٪` : "—";
       }
     }
     renderPrizes();
 
-    const prizeHead = ["متن جایزه", "نوع", "مقدار", "سقف تخفیف (ریال)", "دفعات استفاده",
-      isWordle ? "حداقل امتیاز" : isQuiz ? "حداقل جواب درست" : "وزن شانس", isScored ? "" : "احتمال", "موجودی", "داده‌شده", isScored ? "" : "رنگ", "فعال", ""]
-      .filter((h, i) => !(isScored && (i === 6 || i === 9)));
+    const prizeHead = ["متن جایزه", "نوع", "مقدار", "سقف تخفیف (ریال)", "دفعات استفاده", "گاوصندوق",
+      isWordle ? "حداقل امتیاز" : isQuiz ? "حداقل جواب درست" : "وزن شانس", isScored ? "" : isVault ? "احتمال در همان گاوصندوق" : "احتمال",
+      "موجودی", "داده‌شده", isScored ? "" : "رنگ", "فعال", ""]
+      .filter((h, i) => !(isScored && (i === 7 || i === 10)) && !(i === 5 && !isVault));
 
     let questionsBox = "";
     if (isScored) {
@@ -321,14 +338,28 @@
           el("label", { class: "f" }, el("span", {}, "سقف کد در روز (۰ = بدون سقف)"), num("daily_code_limit")),
           isQuiz ? el("label", { class: "f" }, el("span", {}, "تعداد کلمه در هر بازی"), f.question_count) : "",
           isQuiz ? el("label", { class: "f" }, el("span", {}, "زمان (ثانیه)"), f.time_limit) : "")),
+      isVault ? el("div", { class: "card" }, el("h2", {}, "تنظیمات جمعه سیاه"),
+        el("p", { class: "muted small" }, "بازی خودش از «شروع» روشن و در «پایان» خاموش می‌شود. رمز ۴ رقمی است و ۶ حدس دارد."),
+        el("div", { class: "form-grid" },
+          el("label", { class: "f" }, el("span", {}, "طلایی: پیدا کردن رمز تا چند حدس"), f.gold_max),
+          el("label", { class: "f" }, el("span", {}, "نقره‌ای: پیدا کردن رمز تا چند حدس"), f.silver_max),
+          el("label", { class: "f" }, el("span", {}, "ساعت طلایی از ساعت"), f.golden_from),
+          el("label", { class: "f" }, el("span", {}, "ساعت طلایی تا ساعت"), f.golden_to),
+          el("label", { class: "f" }, el("span", {}, "شانس جایزه‌های بزرگ در ساعت طلایی (چند برابر؛ ۱ = خاموش)"), f.golden_boost),
+          el("label", { class: "f" }, el("span", {}, "روز شانس هدیه (مثلاً جمعه)"), f.bonus_date),
+          el("label", { class: "f" }, el("span", {}, "تعداد شانس هدیه در آن روز"), f.bonus_chances)),
+        el("label", { class: "check", style: "margin-top:12px" }, f.teaser, "قبل از شروع، صفحه‌ی «به‌زودی» با شمارش معکوس نشان داده شود"),
+        el("p", { class: "muted small" }, "در ساعت طلایی، در هر گاوصندوق همه‌ی جایزه‌ها جز کوچک‌ترینش چند برابر شانس می‌گیرند. موجودی جایزه‌ی ۹۰٪ را در جدول پایین تعیین کنید.")) : "",
       el("div", { class: "card" },
-        el("div", { class: "row between" }, el("h2", {}, isQuiz ? "جایزه‌ها بر اساس جواب درست" : isWordle ? "جایزه‌ها بر اساس تعداد حدس"
+        el("div", { class: "row between" }, el("h2", {}, isVault ? "جایزه‌های هر گاوصندوق" : isQuiz ? "جایزه‌ها بر اساس جواب درست" : isWordle ? "جایزه‌ها بر اساس تعداد حدس"
           : ({ wheel: "خانه‌های گردونه", slot: "نمادهای ماشین شانس", chest: "جایزه‌های صندوق" }[game.kind] || "جایزه‌های کارت")),
           el("button", { type: "button", class: "btn light", onclick: () => {
-            prizes.push({ label: "جایزه‌ی تازه", kind: "percentage", amount: 10, max_amount: 0, usage_count: 1, weight: 1, stock: null, min_score: 0, color: "", active: 1, given: 0 });
+            prizes.push({ label: "جایزه‌ی تازه", kind: "percentage", amount: 10, max_amount: 0, usage_count: 1, weight: 1, stock: null, min_score: isVault ? 1 : 0, color: "", active: 1, given: 0 });
             renderPrizes();
           } }, "+ جایزه")),
-        el("p", { class: "muted small" }, isWordle
+        el("p", { class: "muted small" }, isVault
+          ? "هر جایزه مال یکی از سه گاوصندوق است. بازیکن بسته به تعداد حدس گاوصندوقی را باز می‌کند و جایزه با «وزن شانس» از بین جایزه‌های همان گاوصندوق انتخاب می‌شود. اگر جایزه‌های یک گاوصندوق تمام شود، گاوصندوق پایین‌تر باز می‌شود. مبلغ‌ها به ریال است."
+          : isWordle
           ? "امتیاز = ۷ منهای تعداد حدس‌ها (۱ حدس = ۶، ۶ حدس = ۱، پیدا نکردن = ۰). بازیکن بهترین جایزه‌ای را می‌گیرد که امتیازش به آن برسد. مبلغ‌ها به ریال است."
           : isQuiz
           ? "بازیکن بهترین جایزه‌ای را می‌گیرد که «حداقل جواب درست» آن را آورده باشد. یک ردیف «بدون جایزه» با حداقل ۰ بگذارید. مبلغ‌ها به ریال است."
@@ -352,6 +383,12 @@
           min_score: Number(p.min_score) || 0, color: p.color || "", active: !!p.active,
         })),
       };
+      if (isVault) {
+        for (const key of ["gold_max", "silver_max", "golden_from", "golden_to", "golden_boost", "bonus_chances"]) body.settings[key] = Number(f[key].value) || 0;
+        body.settings.golden_boost = body.settings.golden_boost || 1;
+        body.settings.bonus_date = f.bonus_date.value || "";
+        body.settings.teaser = f.teaser.checked;
+      }
       if (isQuiz) {
         body.settings.question_count = Number(f.question_count.value) || 5;
         body.settings.time_limit = Number(f.time_limit.value) || 60;

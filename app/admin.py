@@ -137,7 +137,7 @@ class GameIn(BaseModel):
 
 class NewGameIn(BaseModel):
     slug: str
-    kind: Literal["wheel", "scratch", "chest", "slot", "quiz", "wordle"]
+    kind: Literal["wheel", "scratch", "chest", "slot", "quiz", "wordle", "vault"]
     title: str = Field(min_length=1, max_length=80)
 
 
@@ -153,6 +153,12 @@ def _game_full(conn, game_id: int) -> dict:
 
 def _check_prizes(kind: str, prizes: list[PrizeIn]) -> None:
     active = [p for p in prizes if p.active]
+    if kind == "vault":
+        for p in prizes:
+            if p.min_score not in games.VAULT_TIERS:
+                raise HTTPException(400, f"«{p.label}»: گاوصندوق (برنزی / نقره‌ای / طلایی) را انتخاب کنید.")
+        if not any(p.min_score == 1 and p.weight > 0 and p.kind != "none" for p in active):
+            raise HTTPException(400, "گاوصندوق برنزی حداقل یک جایزه‌ی فعال با شانس بیشتر از صفر لازم دارد.")
     if kind in games.CHANCE_KINDS:
         if len(active) < 2:
             raise HTTPException(400, "حداقل دو گزینه‌ی فعال لازم است.")
@@ -187,6 +193,9 @@ def create_game(body: NewGameIn):
     if not re.fullmatch(r"[a-z0-9][a-z0-9-]{1,39}", slug):
         raise HTTPException(400, "نشانی بازی فقط حروف انگلیسی کوچک، عدد و خط تیره (۲ تا ۴۰ حرف).")
     settings = {"question_count": 5, "time_limit": 60} if body.kind == "quiz" else {}
+    if body.kind == "vault":
+        settings = {"teaser": True, "gold_max": 3, "silver_max": 5, "golden_from": 20, "golden_to": 22,
+                    "golden_boost": 2, "bonus_date": "", "bonus_chances": 0, "color": "#FFC53D"}
     with db.session() as conn:
         if conn.execute("SELECT 1 FROM games WHERE slug=?", (slug,)).fetchone():
             raise HTTPException(400, "این نشانی قبلاً استفاده شده.")
@@ -195,7 +204,10 @@ def create_game(body: NewGameIn):
             (slug, body.kind, body.title, json.dumps(settings), now_iso()))
         gid = cur.lastrowid
         # a new game starts with the approved prize plan
-        if body.kind in games.SCORED_KINDS:
+        if body.kind == "vault":
+            db.insert_vault_plan(conn, gid)
+            rows = []
+        elif body.kind in games.SCORED_KINDS:
             plan = db.QUIZ_PLAN if body.kind == "quiz" else db.WORDLE_PLAN
             rows = [(label, pct, 1, score, db.DEFAULT_COLORS[i % len(db.DEFAULT_COLORS)])
                     for i, (label, pct, score) in enumerate(plan)]
@@ -226,6 +238,22 @@ def update_game(game_id: int, body: GameIn):
         if game["kind"] == "quiz":
             settings["question_count"] = max(1, min(int(settings.get("question_count", 5)), 20))
             settings["time_limit"] = max(10, min(int(settings.get("time_limit", 60)), 600))
+        if game["kind"] == "vault":
+            def clamp(key, default, lo, hi):
+                try:
+                    settings[key] = max(lo, min(hi, int(settings.get(key, default))))
+                except (TypeError, ValueError):
+                    settings[key] = default
+            clamp("gold_max", 3, 1, games.VAULT_MAX_GUESSES)
+            clamp("silver_max", 5, 1, games.VAULT_MAX_GUESSES)
+            settings["silver_max"] = max(settings["silver_max"], settings["gold_max"])
+            clamp("golden_from", 20, 0, 23)
+            clamp("golden_to", 22, 1, 24)
+            clamp("golden_boost", 2, 1, 10)
+            clamp("bonus_chances", 0, 0, 10)
+            settings["teaser"] = bool(settings.get("teaser", True))
+            if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(settings.get("bonus_date") or "")):
+                settings["bonus_date"] = ""
         if "color" in settings and not re.fullmatch(r"#[0-9a-fA-F]{6}", str(settings["color"] or "")):
             settings["color"] = ""
 

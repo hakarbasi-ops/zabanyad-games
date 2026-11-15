@@ -366,3 +366,148 @@ body {
   .wheel-wrap svg.wheel { transition-duration: 1s; }
   .sheet, .overlay { animation: none; }
 }
+
+/* ================= Black Friday vault (kind=vault): dark page, gold accents ================= */
+.theme-bf {
+  --gold: #ffc53d; --gold-press: #b8860b; --gold-soft: rgba(255, 197, 61, .14);
+  --bf-bg: #0c0c11; --bf-card: #17171f; --bf-line: #2a2a35; --bf-text: #f4f1e8; --bf-muted: #a19d92;
+  --brand: var(--gold); --brand-press: var(--gold-press); --brand-lighter: var(--gold-soft);
+  background: radial-gradient(120% 60% at 50% -10%, #2b2210 0%, var(--bf-bg) 55%) fixed, var(--bf-bg);
+  color: var(--bf-text);
+}
+.theme-bf .appbar { background: rgba(12, 12, 17, .92); box-shadow: 0 1px 0 var(--bf-line); backdrop-filter: blur(8px); }
+.theme-bf .appbar .brand, .theme-bf .appbar .acct { color: var(--bf-text); }
+.theme-bf .appbar .acct-out { background: transparent; border-color: var(--bf-line); color: var(--bf-muted); }
+.theme-bf .appbar .mycodes { color: var(--gold); background: var(--gold-soft); }
+.theme-bf .hero .eyebrow { color: var(--gold); letter-spacing: 1px; }
+.theme-bf .hero h2 { color: #fff; }
+.theme-bf .hero p, .theme-bf .rules { color: var(--bf-muted); }
+.theme-bf .card, .theme-bf .wallet { background: var(--bf-card); box-shadow: 0 0 0 1px var(--bf-line), 0 20px 40px -24px #000; }
+.theme-bf .wallet-count { color: var(--bf-text); }
+.theme-bf .field label, .theme-bf .otp p { color: var(--bf-muted); }
+.theme-bf .input { background: #0f0f15; border-color: var(--bf-line); color: #fff; }
+.theme-bf .input:focus { border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold-soft); }
+.theme-bf .otp { border-top-color: var(--bf-line); }
+.theme-bf .btn { color: #1a1300; background: linear-gradient(180deg, #ffd66b, var(--gold)); }
+.theme-bf .btn[disabled] { background: #2a2a35; color: #6d6a62; box-shadow: 0 4px 0 #1d1d26; }
+.theme-bf .btn.outline { background: transparent; color: var(--gold); border-color: var(--gold); }
+.theme-bf .closed { color: var(--bf-muted); }
+.theme-bf .notice { background: #2b2410; color: #f3d98a; }
+.theme-bf .sheet { background: var(--bf-card); color: var(--bf-text); box-shadow: 0 -1px 0 var(--bf-line); }
+.theme-bf .sheet p { color: #d8d4c8; }
+.theme-bf .sheet .muted { color: var(--bf-muted); }
+.theme-bf .code-box { background: #0f0f15; border-color: var(--gold); }
+.theme-bf .code-box b { color: #fff; }
+.theme-bf .invite-cta p { color: var(--gold); }
+.theme-bf .error { background: #3a1517; color: #ffb3b3; }
+
+/* event strip: countdown + golden hour + limited prizes */
+.bf-strip { display: flex; flex-direction: column; gap: 8px; margin-bottom: 14px; }
+.bf-count {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  background: linear-gradient(90deg, #241c0a, #15151c); border: 1px solid #3a2f12; border-radius: 12px; padding: 10px 12px;
+}
+.bf-count span { font-size: 12px; color: var(--bf-muted); }
+.bf-count .ltr-time { direction: ltr; unicode-bidi: isolate; font-family: var(--latin); }
+.bf-count b { font-size: 17px; color: var(--gold); letter-spacing: 1px; font-variant-numeric: tabular-nums; }
+.bf-badges { display: flex; flex-wrap: wrap; gap: 6px; }
+.bf-badge { font-size: 12px; font-weight: 700; padding: 4px 10px; border-radius: 99px; background: var(--gold-soft); color: var(--gold); }
+.bf-badge.hot { background: #ff3b3b; color: #fff; animation: pulse 1.4s ease-in-out infinite; }
+.bf-badge.off { background: #22222c; color: var(--bf-muted); }
+@keyframes pulse { 50% { box-shadow: 0 0 0 6px rgba(255, 59, 59, 0); transform: scale(1.04); } 0% { box-shadow: 0 0 0 0 rgba(255, 59, 59, .6); } }
+
+/* three vault tiers */
+.bf-tiers { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 4px 0; }
+.bf-tier { border-radius: 12px; padding: 12px 6px 10px; text-align: center; background: #101016; border: 1px solid var(--bf-line); }
+.bf-tier i { display: block; font-style: normal; font-size: 26px; line-height: 1.2; }
+.bf-tier b { display: block; font-size: 14px; margin-top: 2px; }
+.bf-tier small { display: block; font-size: 11px; color: var(--bf-muted); line-height: 1.6; }
+.bf-tier em { display: block; font-style: normal; font-weight: 800; font-size: 13px; margin-top: 4px; }
+.bf-tier.t3 { border-color: #6b5214; background: linear-gradient(180deg, #2a2110, #101016); }
+.bf-tier.t3 b, .bf-tier.t3 em { color: var(--gold); }
+.bf-tier.t2 b, .bf-tier.t2 em { color: #d9dde3; }
+.bf-tier.t1 b, .bf-tier.t1 em { color: #e09a5a; }
+.bf-intro { margin: 0 0 10px; color: var(--bf-muted); font-size: 13px; }
+
+/* live winners */
+.bf-ticker { margin-top: 14px; overflow: hidden; border-radius: 10px; background: #101016; border: 1px solid var(--bf-line); height: 36px; position: relative; }
+.bf-ticker-track { display: flex; gap: 28px; white-space: nowrap; position: absolute; top: 0; right: 0; height: 36px; align-items: center;
+  padding-inline: 12px; animation: ticker var(--dur, 30s) linear infinite; font-size: 12px; color: var(--bf-muted); }
+.bf-ticker-track b { color: var(--gold); }
+.bf-ticker-track .m { font-family: var(--latin); direction: ltr; unicode-bidi: isolate; color: #ddd; }
+@keyframes ticker { from { transform: translateX(-100%); } to { transform: translateX(100%); } }
+
+/* the vault door */
+.vault {
+  --v: var(--gold); position: relative; width: min(190px, 60%); aspect-ratio: 1; margin: 2px auto 14px;
+  border-radius: 22px; background: linear-gradient(145deg, #3b3b46, #1b1b22); box-shadow: inset 0 0 0 6px #2c2c36, 0 18px 30px -16px #000;
+  display: grid; place-items: center; perspective: 600px;
+}
+.vault::before { content: ""; position: absolute; inset: 12px; border-radius: 16px; border: 2px solid rgba(255,255,255,.06); }
+.vault-door {
+  position: absolute; inset: 14px; border-radius: 14px; display: grid; place-items: center;
+  background: linear-gradient(145deg, #4a4a57, #26262f); box-shadow: inset 0 0 0 3px rgba(255,255,255,.05), 0 6px 14px rgba(0,0,0,.5);
+  transform-origin: 0% 50%; transition: transform 1s cubic-bezier(.5,0,.2,1); z-index: 2;
+}
+.vault-dial {
+  width: 58%; aspect-ratio: 1; border-radius: 50%; position: relative;
+  background: radial-gradient(circle, #2a2a33 30%, #50505e 31%, #3a3a46 60%, #23232b 61%);
+  box-shadow: 0 0 0 4px var(--v), 0 0 18px -2px var(--v); transition: transform .5s cubic-bezier(.3,1.4,.5,1);
+}
+.vault-dial::after { content: ""; position: absolute; left: 50%; top: 6%; width: 6%; height: 22%; transform: translateX(-50%); border-radius: 3px; background: var(--v); }
+.vault-prize { position: absolute; inset: 0; display: grid; place-items: center; text-align: center; font-weight: 900; font-size: 24px; color: var(--v); z-index: 1; line-height: 1.3; }
+.vault-prize small { display: block; font-size: 11px; color: var(--bf-muted); font-weight: 600; }
+.vault.t3 { --v: #ffc53d; } .vault.t2 { --v: #d9dde3; } .vault.t1 { --v: #e09a5a; }
+.vault.shake { animation: shake .1s linear 6; }
+.vault.open .vault-door { transform: rotateY(-105deg); }
+.vault.open { box-shadow: inset 0 0 0 6px #2c2c36, 0 0 50px -6px var(--v); }
+
+/* code grid + keypad */
+.vgrid { direction: ltr; display: grid; grid-template-columns: repeat(4, 1fr); gap: 7px; max-width: 232px; margin: 0 auto; }
+.vtile {
+  aspect-ratio: 1; display: grid; place-items: center; border-radius: 10px; font-family: var(--latin);
+  font-size: 24px; font-weight: 800; background: #0f0f15; border: 2px solid var(--bf-line); color: #fff;
+}
+.vtile.filled { border-color: #6b6875; animation: pop .12s; }
+.vtile.flip { animation: flip .45s ease; border-color: transparent; }
+.vtile.correct { background: var(--success); }
+.vtile.present { background: var(--gold); color: #1a1300; }
+.vtile.absent { background: #34343f; color: #9a98a3; }
+.vgrid.nudge { animation: shake .1s linear 3; }
+.vmsg { text-align: center; min-height: 22px; font-size: 13px; color: var(--bf-muted); margin: 8px 0; }
+.vkeys { direction: ltr; display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; max-width: 320px; margin: 0 auto; }
+.vkey {
+  font-family: var(--latin); font-weight: 800; font-size: 20px; height: 48px; border: 0; border-radius: 10px;
+  background: #24242e; color: #fff; cursor: pointer; box-shadow: 0 3px 0 #15151b;
+}
+.vkey:active { transform: translateY(2px); box-shadow: 0 1px 0 #15151b; }
+.vkey.correct { background: var(--success); } .vkey.present { background: var(--gold); color: #1a1300; } .vkey.absent { background: #1a1a21; color: #55535c; }
+.vkey.wide { grid-column: span 2; font-family: inherit; font-size: 15px; background: var(--gold); color: #1a1300; box-shadow: 0 3px 0 var(--gold-press); }
+.vkey.back { grid-column: span 3; font-family: inherit; font-size: 15px; }
+.vhead { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; font-size: 12px; color: var(--bf-muted); }
+.vhead b { color: var(--gold); }
+
+/* teaser before the start */
+.bf-teaser { text-align: center; padding: 8px 0 4px; }
+.bf-teaser .big { font-size: 64px; line-height: 1.1; }
+.bf-teaser h3 { margin: 8px 0 2px; font-size: 18px; color: #fff; }
+.bf-teaser p { color: var(--bf-muted); margin: 4px 0 14px; }
+.bf-clock { direction: ltr; display: flex; justify-content: center; gap: 8px; }
+.bf-clock div { min-width: 62px; background: #101016; border: 1px solid #3a2f12; border-radius: 12px; padding: 8px 4px; }
+.bf-clock b { display: block; font-family: var(--latin); font-size: 26px; color: var(--gold); font-variant-numeric: tabular-nums; }
+.bf-clock small { display: block; font-size: 11px; color: var(--bf-muted); }
+
+/* home card */
+.game-link.kind-vault {
+  background: radial-gradient(120% 140% at 0% 100%, #3d2f0c 0%, #121218 60%); color: #fff;
+  box-shadow: 0 0 0 1px #4a3a12, 0 10px 26px -12px rgba(255, 197, 61, .45);
+}
+.game-link.kind-vault b { color: #ffc53d; }
+.game-link .soon { display: inline-block; margin-top: 8px; font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 99px;
+  background: rgba(255, 197, 61, .16); color: #ffc53d; max-width: none; }
+.game-link .tag { position: absolute; top: 12px; left: 12px; font-size: 10px; font-weight: 800; letter-spacing: 1px;
+  background: #ff3b3b; color: #fff; border-radius: 6px; padding: 2px 8px; max-width: none; opacity: 1; }
+@media (prefers-reduced-motion: reduce) {
+  .bf-ticker-track { animation: none; position: static; }
+  .vault-door { transition-duration: .2s; }
+}
