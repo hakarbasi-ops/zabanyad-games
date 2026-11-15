@@ -218,6 +218,26 @@
       return [input, hint];
     };
     f.enabled = el("input", { type: "checkbox", checked: !!game.enabled });
+    const isCampaign = game.settings.theme === "bf";        // Black Friday wheel: own spins, fixed code date, focus
+    const hasGoldenWeight = !isVault && game.settings.golden_from !== undefined;
+    const hasJackpotDays = isVault || isCampaign;
+    // "2026-11-26 3" lines <-> {"2026-11-26": 3}
+    const daysText = (d) => Object.entries(d || {}).map(([k, v]) => `${k} ${v}  (${jalaliDate(k + " 12:00")})`).join("\n");
+    const parseDays = (t) => Object.fromEntries(t.split("\n").map((l) => l.trim().match(/^(\d{4}-\d{2}-\d{2})\s+(\d+)/)).filter(Boolean).map((m) => [m[1], Number(m[2])]));
+    if (hasJackpotDays) f.jackpot_days = el("textarea", { class: "ltr", style: "min-height:90px" }, daysText(game.settings.jackpot_days));
+    if (isCampaign) {
+      const st = game.settings;
+      const n = (key, def, attrs = {}) => (f[key] = el("input", { type: "number", value: st[key] ?? def, ...attrs }));
+      n("own_spins", 1, { min: 0, max: 20 }); n("bonus_spins", 1, { min: 0, max: 20 }); n("show_left_below", 4, { min: 0 });
+      n("golden_from", 20, { min: 0, max: 23 }); n("golden_to", 22, { min: 1, max: 24 });
+      f.bonus_date = el("input", { type: "date", value: st.bonus_date || "" });
+      f.code_until = el("input", { type: "datetime-local", value: (st.code_until || "").replace(" ", "T").slice(0, 16) });
+      f.focus = el("input", { type: "checkbox", checked: !!st.focus });
+      f.focus_message = el("input", { type: "text", value: st.focus_message || "" });
+      f.buy_url = el("input", { type: "url", class: "ltr", value: st.buy_url || "" });
+      f.store_links = el("textarea", { style: "min-height:90px" }, (st.store_links || []).map((l) => `${l.label} | ${l.url}`).join("\n"));
+      f.teaser = el("input", { type: "checkbox", checked: st.teaser !== false });
+    }
     f.rules = el("textarea", {}, game.rules || "");
     f.color = el("input", { type: "color", value: game.settings.color || "#f26600" });
     if (isVault) {
@@ -274,6 +294,8 @@
           isScored
             ? el("td", {}, bind("min_score", el("input", { type: "number", min: 0, value: p.min_score, style: "width:70px" }), n))
             : el("td", {}, bind("weight", el("input", { type: "number", min: 0, value: p.weight, style: "width:80px" }), n)),
+          hasGoldenWeight ? el("td", {}, bind("golden_weight", el("input", { type: "number", min: 0, value: p.golden_weight ?? "", placeholder: "مثل عادی", style: "width:80px" }),
+            (v) => (v === "" ? null : Number(v)))) : "",
           isScored ? "" : chance,
           el("td", {}, none ? "—" : bind("stock", el("input", { type: "number", min: 0, value: p.stock ?? "", placeholder: "نامحدود", style: "width:90px" }),
             (v) => (v === "" ? null : Number(v)))),
@@ -296,9 +318,10 @@
     renderPrizes();
 
     const prizeHead = ["متن جایزه", "نوع", "مقدار", "سقف تخفیف (ریال)", "دفعات استفاده", "گاوصندوق",
-      isWordle ? "حداقل امتیاز" : isQuiz ? "حداقل جواب درست" : "وزن شانس", isScored ? "" : isVault ? "احتمال در همان گاوصندوق" : "احتمال",
+      isWordle ? "حداقل امتیاز" : isQuiz ? "حداقل جواب درست" : "وزن شانس", "وزن در ساعت طلایی",
+      isScored ? "" : isVault ? "احتمال در همان گاوصندوق" : "احتمال",
       "موجودی", "داده‌شده", isScored ? "" : "رنگ", "فعال", ""]
-      .filter((h, i) => !(isScored && (i === 7 || i === 10)) && !(i === 5 && !isVault));
+      .filter((h, i) => !(isScored && (i === 8 || i === 11)) && !(i === 5 && !isVault) && !(i === 7 && !hasGoldenWeight));
 
     let questionsBox = "";
     if (isScored) {
@@ -312,6 +335,26 @@
         el("p", { class: "muted small" }, `${fa(game.questions.filter((q) => q.active).length)} کلمه‌ی فعال`));
     }
 
+    // daily report for the marketing team: visits, plays, codes per prize, sources, players who signed up after the prompt
+    const reportBox = el("div", { class: "card" }, el("h2", {}, "گزارش روزانه"), el("p", { class: "muted small" }, "…"));
+    api(`/api/admin/games/${game.id}/report`).then(({ days }) => {
+      const list = (o) => Object.entries(o || {}).sort((a, b) => b[1] - a[1]).map(([k, v]) => `${k}: ${fa(v)}`).join("، ") || "—";
+      reportBox.replaceChildren(el("h2", {}, "گزارش روزانه"),
+        el("p", { class: "muted small" }, "منبع از لینک‌هایی می‌آید که آخرشان ?utm_source=instagram (یا telegram، sms، story) دارند. «ثبت‌نام بعد از پیام» یعنی کسی که اول پیام «اول ثبت‌نام کن» گرفت و بعد برگشت و کد گرفت. اینکه کد در خرید استفاده شد یا نه را فقط زبانیاد (Nova) می‌داند؛ برای تطبیق از «بازی‌ها و کدها» خروجی اکسل بگیرید."),
+        days.length ? el("div", { class: "table-wrap" }, el("table", {},
+          el("thead", {}, el("tr", {}, ["روز", "بازدید", "بازی", "کد", "جایزه‌ها", "بازی به تفکیک منبع", "بازدید به تفکیک منبع", "پیام ثبت‌نام", "ثبت‌نام بعد از پیام"].map((h) => el("th", {}, h)))),
+          el("tbody", {}, days.map((d) => el("tr", {},
+            el("td", {}, jalaliDate(d.day + " 12:00")), el("td", {}, fa(d.visits)), el("td", {}, fa(d.plays)), el("td", {}, fa(d.codes)),
+            el("td", { class: "small" }, list(d.prizes)), el("td", { class: "small" }, list(d.sources)),
+            el("td", { class: "small" }, list(d.visit_sources)), el("td", {}, fa(d.need_signup)), el("td", {}, fa(d.signed_up)))))))
+          : el("p", { class: "muted" }, "هنوز بازدید یا بازی‌ای ثبت نشده."));
+    }).catch((e) => reportBox.replaceChildren(el("h2", {}, "گزارش روزانه"), el("p", { class: "msg bad" }, e.message)));
+
+    function jackpotField() {
+      return el("label", { class: "f", style: "margin-top:12px" },
+        el("span", {}, "سهم روزانه‌ی جایزه‌ی محدود (۹۰٪): هر خط «تاریخ میلادی تعداد»؛ سهمِ خرج‌نشده به روز بعد می‌رود"),
+        f.jackpot_days);
+    }
     const msg = el("div");
     const save = el("button", { class: "btn" }, "ذخیره");
     const form = el("form", {},
@@ -349,12 +392,29 @@
           el("label", { class: "f" }, el("span", {}, "روز شانس هدیه (مثلاً جمعه)"), f.bonus_date),
           el("label", { class: "f" }, el("span", {}, "تعداد شانس هدیه در آن روز"), f.bonus_chances)),
         el("label", { class: "check", style: "margin-top:12px" }, f.teaser, "قبل از شروع، صفحه‌ی «به‌زودی» با شمارش معکوس نشان داده شود"),
-        el("p", { class: "muted small" }, "در ساعت طلایی، در هر گاوصندوق همه‌ی جایزه‌ها جز کوچک‌ترینش چند برابر شانس می‌گیرند. موجودی جایزه‌ی ۹۰٪ را در جدول پایین تعیین کنید.")) : "",
+        el("p", { class: "muted small" }, "در ساعت طلایی، در هر گاوصندوق همه‌ی جایزه‌ها جز کوچک‌ترینش چند برابر شانس می‌گیرند. موجودی جایزه‌ی ۹۰٪ را در جدول پایین تعیین کنید."),
+        jackpotField()) : "",
+      isCampaign ? el("div", { class: "card" }, el("h2", {}, "تنظیمات کمپین جمعه سیاه"),
+        el("div", { class: "form-grid" },
+          el("label", { class: "f" }, el("span", {}, "چرخش روزانه‌ی هر شماره"), f.own_spins),
+          el("label", { class: "f" }, el("span", {}, "روز چرخش هدیه (جمعه)"), f.bonus_date),
+          el("label", { class: "f" }, el("span", {}, "تعداد چرخش هدیه در آن روز"), f.bonus_spins),
+          el("label", { class: "f" }, el("span", {}, "ساعت طلایی از ساعت"), f.golden_from),
+          el("label", { class: "f" }, el("span", {}, "ساعت طلایی تا ساعت"), f.golden_to),
+          el("label", { class: "f" }, el("span", {}, "همه‌ی کدها معتبر تا"), f.code_until),
+          el("label", { class: "f" }, el("span", {}, "شمارنده‌ی «فقط X کد ۹۰٪ مانده» از چند تا به پایین"), f.show_left_below),
+          el("label", { class: "f" }, el("span", {}, "دکمه‌ی «خرید در اپ»"), f.buy_url)),
+        el("label", { class: "f", style: "margin-top:12px" }, el("span", {}, "لینک‌های نصب (هر خط: «متن دکمه | لینک»)"), f.store_links),
+        el("label", { class: "check", style: "margin-top:12px" }, f.focus, "تا وقتی این بازی باز است، بقیه‌ی بازی‌ها خاموش باشند (جز گاوصندوق)"),
+        el("label", { class: "f", style: "margin-top:8px" }, el("span", {}, "پیام روی بازی‌های خاموش"), f.focus_message),
+        el("label", { class: "check", style: "margin-top:12px" }, f.teaser, "قبل از شروع، کارت «به‌زودی» و شمارش معکوس نشان داده شود"),
+        el("p", { class: "muted small" }, "چرخش‌های این بازی از شانس‌های بقیه‌ی بازی‌ها جداست. «وزن در ساعت طلایی» هر جایزه در جدول پایین است؛ خالی = مثل ساعت عادی."),
+        jackpotField()) : "",
       el("div", { class: "card" },
         el("div", { class: "row between" }, el("h2", {}, isVault ? "جایزه‌های هر گاوصندوق" : isQuiz ? "جایزه‌ها بر اساس جواب درست" : isWordle ? "جایزه‌ها بر اساس تعداد حدس"
           : ({ wheel: "خانه‌های گردونه", slot: "نمادهای ماشین شانس", chest: "جایزه‌های صندوق" }[game.kind] || "جایزه‌های کارت")),
           el("button", { type: "button", class: "btn light", onclick: () => {
-            prizes.push({ label: "جایزه‌ی تازه", kind: "percentage", amount: 10, max_amount: 0, usage_count: 1, weight: 1, stock: null, min_score: isVault ? 1 : 0, color: "", active: 1, given: 0 });
+            prizes.push({ label: "جایزه‌ی تازه", kind: "percentage", amount: 10, max_amount: 0, usage_count: 1, weight: 1, golden_weight: null, stock: null, min_score: isVault ? 1 : 0, color: "", active: 1, given: 0 });
             renderPrizes();
           } }, "+ جایزه")),
         el("p", { class: "muted small" }, isVault
@@ -366,6 +426,7 @@
           : "شانس هر جایزه = وزن آن ÷ جمع وزن‌ها. وقتی موجودی جایزه‌ای تمام شود، دیگر نمی‌افتد. مبلغ‌ها و سقف تخفیف به ریال است."),
         el("div", { class: "table-wrap" }, el("table", {}, el("thead", {}, el("tr", {}, prizeHead.map((h) => el("th", {}, h)))), prizeRows))),
       questionsBox,
+      reportBox,
       el("div", { class: "sticky-save row" }, save, msg,
         el("button", { type: "button", class: "btn danger", style: "margin-inline-start:auto", onclick: removeGame }, "حذف بازی")));
 
@@ -380,9 +441,22 @@
         prizes: prizes.map((p) => ({
           id: p.id, label: p.label, kind: p.kind, amount: Number(p.amount) || 0, max_amount: Number(p.max_amount) || 0,
           usage_count: Number(p.usage_count) || 1, weight: Number(p.weight) || 0, stock: p.kind === "none" ? null : p.stock,
+          golden_weight: p.golden_weight === "" || p.golden_weight === undefined ? null : p.golden_weight,
           min_score: Number(p.min_score) || 0, color: p.color || "", active: !!p.active,
         })),
       };
+      if (hasJackpotDays) body.settings.jackpot_days = parseDays(f.jackpot_days.value);
+      if (isCampaign) {
+        for (const key of ["own_spins", "bonus_spins", "show_left_below", "golden_from", "golden_to"]) body.settings[key] = Number(f[key].value) || 0;
+        body.settings.bonus_date = f.bonus_date.value || "";
+        body.settings.code_until = f.code_until.value || "";
+        body.settings.focus = f.focus.checked;
+        body.settings.focus_message = f.focus_message.value;
+        body.settings.buy_url = f.buy_url.value.trim();
+        body.settings.teaser = f.teaser.checked;
+        body.settings.store_links = f.store_links.value.split("\n").map((l) => l.split("|").map((x) => x.trim()))
+          .filter((x) => x[1]).map(([label, url]) => ({ label, url }));
+      }
       if (isVault) {
         for (const key of ["gold_max", "silver_max", "golden_from", "golden_to", "golden_boost", "bonus_chances"]) body.settings[key] = Number(f[key].value) || 0;
         body.settings.golden_boost = body.settings.golden_boost || 1;

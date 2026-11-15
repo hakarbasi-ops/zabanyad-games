@@ -56,6 +56,9 @@ def availability(game: dict) -> tuple[bool, str]:
 def public_view(conn, game: dict) -> dict:
     ok, message = availability(game)
     prizes = prizes_of(conn, game["id"])
+    focus = blocked_by_focus(conn, game) if ok else None
+    if focus:
+        ok, message = False, focus["settings"].get("focus_message") or f"الان فقط «{focus['title']}» فعال است."
     view = {
         "slug": game["slug"],
         "kind": game["kind"],
@@ -66,7 +69,26 @@ def public_view(conn, game: dict) -> dict:
         "message": message,
         "color": game["settings"].get("color", ""),
         "ends_at": game["ends_at"],
+        "starts_at": game["starts_at"],
+        "teaser": bool(game["settings"].get("teaser")),
+        "theme": "bf" if game["kind"] == "vault" else game["settings"].get("theme", ""),
+        "server_now": local_now().strftime("%Y-%m-%dT%H:%M:%S"),
     }
+    if focus:
+        view["focus"] = {"slug": focus["slug"], "title": focus["title"]}
+    cfg = game["settings"]
+    if cfg.get("theme") == "bf" or game["kind"] == "vault":
+        view.update({
+            "limited": _limited(prizes, game), "show_left_below": int(cfg.get("show_left_below") or 0),
+            "golden": ({"from": cfg.get("golden_from"), "to": cfg.get("golden_to"),
+                        "boost": int(cfg.get("golden_boost") or 2), "now": in_golden_hour(game)}
+                       if "golden_from" in cfg else None),
+            "buy_url": cfg.get("buy_url", ""), "store_links": cfg.get("store_links", []),
+            "code_until": cfg.get("code_until"), "slice_repeat": int(cfg.get("slice_repeat") or 1),
+        })
+    if own_spins(game):
+        view["own_spins"] = {"daily": int(cfg.get("own_spins") or 0), "bonus_date": cfg.get("bonus_date"),
+                             "bonus": int(cfg.get("bonus_spins") or 0)}
     if game["kind"] == "wordle":
         view["max_guesses"] = WORDLE_MAX_GUESSES
     if game["kind"] == "vault":
@@ -78,17 +100,65 @@ def public_view(conn, game: dict) -> dict:
         view["ladder"] = [{"label": p["label"], "min_score": p["min_score"], "win": p["kind"] != "none"}
                           for p in sorted(prizes, key=lambda p: p["min_score"])]
     else:
-        view["slices"] = [{"label": p["label"], "color": p["color"], "win": p["kind"] != "none"} for p in prizes]
+        cap = jackpot_cap(game)
+        view["slices"] = [{"label": p["label"], "color": p["color"], "win": p["kind"] != "none",
+                           "sold_out": not _in_stock(p) or not _in_day_plan(game, p, cap)} for p in prizes]
     return view
 
 
 # ---------------------------------------------------------------- limits
 
 
+def focus_game(conn) -> dict | None:
+    """An open game with settings.focus takes over the site (Black Friday wheel): only it and its focus_keep play."""
+    for g in db.rows(conn.execute("SELECT * FROM games WHERE enabled=1")):
+        if g["settings"].get("focus") and availability(g)[0]:
+            return g
+    return None
+
+
+def blocked_by_focus(conn, game: dict) -> dict | None:
+    focus = focus_game(conn)
+    if focus and game["slug"] != focus["slug"] and game["slug"] not in focus["settings"].get("focus_keep", []):
+        return focus
+    return None
+
+
+def own_spins(game: dict) -> bool:
+    return int(game["settings"].get("own_spins") or 0) > 0
+
+
+def spins_today_allowed(game: dict) -> int:
+    cfg = game["settings"]
+    extra = int(cfg.get("bonus_spins") or 0) if cfg.get("bonus_date") == local_now().date().isoformat() else 0
+    return int(cfg.get("own_spins") or 0) + extra
+
+
+def spins_used_today(conn, game: dict, mobile: str) -> int:
+    # plays that did not count (not signed up / API error) give the spin back
+    return conn.execute("SELECT COUNT(*) FROM plays WHERE game_id=? AND mobile=? AND created_at >= ?"
+                        " AND status IN ('pending','won','lost')",
+                        (game["id"], mobile, local_day_start_utc())).fetchone()[0]
+
+
+def _spend(conn, game: dict, mobile: str) -> None:
+    """A game with its own daily spins counts them itself; every other game spends a shared chance."""
+    if not own_spins(game):
+        wallet.spend(conn, mobile)
+        return
+    if spins_used_today(conn, game, mobile) >= spins_today_allowed(game):
+        last = (parse_local(game["ends_at"]) or local_now()).date() <= local_now().date()
+        raise PlayError("no_spins", "چرخش امروزت رو زدی! این آخرین روز بود؛ کدت رو تا آخر مهلتش استفاده کن." if last
+                        else "چرخش امروزت رو زدی! فردا دوباره بیا و بچرخون.", 429)
+
+
 def _check_limits(conn, game: dict, mobile: str, ip: str) -> None:
     ok, message = availability(game)
     if not ok:
         raise PlayError("closed", message)
+    focus = blocked_by_focus(conn, game)
+    if focus:
+        raise PlayError("closed", focus["settings"].get("focus_message") or f"الان فقط «{focus['title']}» فعال است.")
 
     # how often a mobile may play is set by its chances (wallet.py), shared by all games
 
@@ -110,9 +180,24 @@ def _in_stock(p: dict) -> bool:
     return p["stock"] is None or p["given"] < p["stock"]
 
 
+def jackpot_cap(game: dict, today: str | None = None) -> int | None:
+    """How many limited (stocked) prizes may have been given by the end of today; None = no day plan.
+    Unused ones roll over to the next day."""
+    days = game["settings"].get("jackpot_days")
+    if not days:
+        return None
+    today = today or local_now().date().isoformat()
+    return sum(int(n) for day, n in days.items() if day <= today)
+
+
+def _in_day_plan(game: dict, p: dict, cap: int | None) -> bool:
+    return cap is None or p["stock"] is None or p["given"] < cap
+
+
 def _usable(conn, game: dict, prizes: list[dict]) -> list[dict]:
-    """Prizes that can be handed out right now (stock left, daily code budget left)."""
-    usable = [p for p in prizes if _in_stock(p)]
+    """Prizes that can be handed out right now (stock left, day plan, daily code budget left)."""
+    cap = jackpot_cap(game)
+    usable = [p for p in prizes if _in_stock(p) and _in_day_plan(game, p, cap)]
     if game["daily_code_limit"] > 0 and _codes_today(conn, game["id"]) >= game["daily_code_limit"]:
         usable = [p for p in usable if p["kind"] == "none"]
     return usable
@@ -144,6 +229,9 @@ def _issue(conn, game: dict, play_id: int, prize: dict, mobile: str) -> dict:
         return {"result": "lost"}
 
     start, end = code_validity(game["code_valid_days"])
+    until = parse_local(game["settings"].get("code_until"))
+    if until:  # campaign codes all end on one date (Black Friday: Sunday 9 Azar)
+        end = until.replace(second=59).strftime("%Y-%m-%d %H:%M:%S")
     req = discount.CodeRequest(
         mobile=mobile, type=prize["kind"], amount=prize["amount"],
         max_amount=prize["max_amount"] or (prize["amount"] if prize["kind"] == "amount" else 0),
@@ -157,7 +245,8 @@ def _issue(conn, game: dict, play_id: int, prize: dict, mobile: str) -> dict:
             conn.execute("UPDATE plays SET status=?, error=?, finished_at=? WHERE id=?",
                          (status, f"{exc.kind}: {exc.detail}"[:300], now_iso(), play_id))
             _release(conn, prize["id"])
-            wallet.refund(conn, mobile)  # this play does not count
+            if not own_spins(game):
+                wallet.refund(conn, mobile)  # this play does not count (own-spin games just stop counting it)
         if status == "need_signup":
             raise PlayError("need_signup",
                             "این شماره در زبانیاد ثبت‌نام نکرده. اول با همین شماره در زبانیاد ثبت‌نام کنید و "
@@ -170,13 +259,18 @@ def _issue(conn, game: dict, play_id: int, prize: dict, mobile: str) -> dict:
     return {"result": "won", "code": code, "valid_until": end}
 
 
+def clean_source(src: str | None) -> str:
+    return "".join(ch for ch in (src or "").lower() if ch.isalnum() or ch in "-_")[:30]
+
+
 def _new_play(conn, game: dict, mobile: str, ip: str, prize: dict | None, status: str = "pending",
-              token: str | None = None, data: dict | None = None, total: int | None = None) -> int:
+              token: str | None = None, data: dict | None = None, total: int | None = None,
+              source: str | None = None) -> int:
     cur = conn.execute(
-        "INSERT INTO plays (game_id, mobile, status, prize_id, prize_label, ip, token, data, total, created_at)"
-        " VALUES (?,?,?,?,?,?,?,?,?,?)",
+        "INSERT INTO plays (game_id, mobile, status, prize_id, prize_label, ip, token, data, total, source, created_at)"
+        " VALUES (?,?,?,?,?,?,?,?,?,?,?)",
         (game["id"], mobile, status, prize["id"] if prize else None, prize["label"] if prize else "",
-         ip, token, json.dumps(data or {}, ensure_ascii=False), total, now_iso()),
+         ip, token, json.dumps(data or {}, ensure_ascii=False), total, clean_source(source) or None, now_iso()),
     )
     return cur.lastrowid
 
@@ -184,23 +278,42 @@ def _new_play(conn, game: dict, mobile: str, ip: str, prize: dict | None, status
 # ---------------------------------------------------------------- wheel / scratch
 
 
-def play_chance(conn, slug: str, mobile: str, ip: str) -> dict:
+def in_golden_hour(game: dict, now=None) -> bool:
+    cfg = game["settings"]
+    if "golden_from" not in cfg:
+        return False
+    start, end, _ = golden_hours(game)
+    hour = (now or local_now()).hour
+    return start < end and start <= hour < end
+
+
+def _golden_weights(game: dict, prizes: list[dict]) -> list[dict]:
+    """In the golden hour, prizes with a golden_weight use it instead of their usual weight."""
+    if not in_golden_hour(game) or not any(p.get("golden_weight") is not None for p in prizes):
+        return prizes
+    return [{**p, "weight": p["golden_weight"] if p.get("golden_weight") is not None else p["weight"]} for p in prizes]
+
+
+def play_chance(conn, slug: str, mobile: str, ip: str, source: str | None = None) -> dict:
     game = get_game(conn, slug)
     if game["kind"] not in CHANCE_KINDS:
         raise PlayError("bad_game", "این بازی از این راه بازی نمی‌شود.")
     prizes = prizes_of(conn, game["id"])
     with db.LOCK, db.transaction(conn):
         _check_limits(conn, game, mobile, ip)
-        prize = draw(_usable(conn, game, prizes))
+        prize = draw(_golden_weights(game, _usable(conn, game, prizes)))
         if not prize:
             raise PlayError("no_prizes", "جایزه‌های این بازی تمام شده.", 409)
-        wallet.spend(conn, mobile)
+        _spend(conn, game, mobile)
         _reserve(conn, prize)
-        play_id = _new_play(conn, game, mobile, ip, prize)
+        play_id = _new_play(conn, game, mobile, ip, prize, source=source)
 
     outcome = _issue(conn, game, play_id, prize, mobile)
     index = next(i for i, p in enumerate(prizes) if p["id"] == prize["id"])
-    return {**outcome, "prize_index": index, "prize_label": prize["label"], "chances": wallet.chances(conn, mobile)}
+    out = {**outcome, "prize_index": index, "prize_label": prize["label"], "chances": wallet.chances(conn, mobile)}
+    if own_spins(game):
+        out["spins_left"] = max(spins_today_allowed(game) - spins_used_today(conn, game, mobile), 0)
+    return out
 
 
 # ---------------------------------------------------------------- quiz
@@ -391,9 +504,21 @@ def vault_tier(game: dict, solved: bool, guesses: int) -> int:
     return 1
 
 
-def _limited(prizes: list[dict]) -> list[dict]:
-    return [{"label": p["label"], "tier": p["min_score"], "left": max(p["stock"] - p["given"], 0)}
-            for p in prizes if p["stock"] is not None and p["kind"] != "none"]
+def _limited(prizes: list[dict], game: dict | None = None) -> list[dict]:
+    cap = jackpot_cap(game) if game else None
+    days = (game or {}).get("settings", {}).get("jackpot_days") or {}
+    out = []
+    for p in prizes:
+        if p["stock"] is None or p["kind"] == "none":
+            continue
+        left = max(p["stock"] - p["given"], 0)
+        item = {"label": p["label"], "tier": p["min_score"], "left": left}
+        if cap is not None:
+            item["left_today"] = max(min(cap, p["stock"]) - p["given"], 0)
+            later = sorted(d for d in days if d > local_now().date().isoformat())
+            item["next_day"] = later[0] if later else None
+        out.append(item)
+    return out
 
 
 def vault_view(conn, game: dict, prizes: list[dict]) -> dict:
@@ -409,7 +534,7 @@ def vault_view(conn, game: dict, prizes: list[dict]) -> dict:
         "digits": VAULT_DIGITS, "max_guesses": VAULT_MAX_GUESSES, "tiers": tiers,
         "gold_max": _setting_int(game, "gold_max", 3, 1, VAULT_MAX_GUESSES),
         "silver_max": _setting_int(game, "silver_max", 5, 1, VAULT_MAX_GUESSES),
-        "limited": _limited(prizes),
+        "limited": _limited(prizes, game),
         "golden": {"from": start, "to": end, "boost": boost, "now": golden_now(game)} if boost > 1 else None,
         "starts_at": game["starts_at"], "teaser": bool(game["settings"].get("teaser", True)),
         "server_now": local_now().strftime("%Y-%m-%dT%H:%M:%S"),
@@ -423,11 +548,22 @@ def recent_winners(conn, game: dict, limit: int = 12) -> dict:
     winners = [{"mobile": mask_mobile(r["mobile"]), "prize": r["prize_label"],
                 "ago": int((now - datetime.fromisoformat(r["finished_at"])).total_seconds()) if r["finished_at"] else 0}
                for r in rows]
-    return {"winners": winners, "limited": _limited(prizes_of(conn, game["id"])),
-            "golden_now": golden_now(game) if game["kind"] == "vault" else False}
+    return {"winners": winners, "limited": _limited(prizes_of(conn, game["id"]), game),
+            "golden_now": golden_now(game) if game["kind"] == "vault" else in_golden_hour(game)}
 
 
-def vault_start(conn, slug: str, mobile: str, ip: str) -> dict:
+def jackpot_winners(conn, min_amount: int = 90, limit: int = 40) -> list[dict]:
+    """Everyone who won the top prize (90%), newest first, masked mobiles: the «برنده‌های ۹۰٪» board."""
+    rows = conn.execute(
+        "SELECT p.mobile, p.prize_label, p.finished_at, g.title FROM plays p JOIN prizes z ON z.id=p.prize_id"
+        " JOIN games g ON g.id=p.game_id WHERE p.status='won' AND z.kind='percentage' AND z.amount >= ?"
+        " ORDER BY p.id DESC LIMIT ?", (min_amount, limit)).fetchall()
+    return [{"mobile": mask_mobile(r["mobile"]), "prize": r["prize_label"], "game": r["title"],
+             "at": datetime.fromisoformat(r["finished_at"]).astimezone(local_now().tzinfo).strftime("%Y-%m-%d %H:%M")
+             if r["finished_at"] else ""} for r in rows]
+
+
+def vault_start(conn, slug: str, mobile: str, ip: str, source: str | None = None) -> dict:
     game = get_game(conn, slug)
     if game["kind"] != "vault":
         raise PlayError("bad_game", "این بازی گاوصندوق نیست.")
@@ -437,7 +573,7 @@ def vault_start(conn, slug: str, mobile: str, ip: str) -> dict:
         _check_limits(conn, game, mobile, ip)
         wallet.spend(conn, mobile)
         _new_play(conn, game, mobile, ip, None, token=token, total=VAULT_MAX_GUESSES,
-                  data={"code": code, "guesses": []})
+                  data={"code": code, "guesses": []}, source=source)
     return {"token": token, "digits": VAULT_DIGITS, "max_guesses": VAULT_MAX_GUESSES,
             "chances": wallet.chances(conn, mobile)}
 

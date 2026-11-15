@@ -82,15 +82,26 @@ def list_open_games():
     with db.session() as conn:
         out = []
         now = local_now()
+        focus = games.focus_game(conn)
+        keep = {focus["slug"], *focus["settings"].get("focus_keep", [])} if focus else None
         for g in db.rows(conn.execute("SELECT * FROM games WHERE enabled=1 ORDER BY id")):
+            if keep is not None and g["slug"] not in keep:
+                continue  # Black Friday: only the focus game (and the ones it keeps) are listed
             ok, _ = games.availability(g)
             start = games.parse_local(g["starts_at"])
-            soon = not ok and g["kind"] == "vault" and g["settings"].get("teaser", True) and start and now < start
+            teaser = g["settings"].get("teaser", g["kind"] == "vault")
+            soon = not ok and teaser and start and now < start
             if ok or soon:
                 out.append({"slug": g["slug"], "kind": g["kind"], "title": g["title"], "subtitle": g["subtitle"],
-                            "soon": bool(soon), "starts_at": g["starts_at"], "ends_at": g["ends_at"]})
-        out.sort(key=lambda g: g["kind"] != "vault")  # the event game first
-        return {"games": out, "shop_url": config.CODE_URL}
+                            "soon": bool(soon), "starts_at": g["starts_at"], "ends_at": g["ends_at"],
+                            "theme": "bf" if g["kind"] == "vault" else g["settings"].get("theme", ""),
+                            "focus": bool(focus and g["slug"] == focus["slug"])})
+        # the focus game first, then running events, then the rest
+        out.sort(key=lambda g: (not g["focus"], g["theme"] != "bf", g["soon"]))
+        return {"games": out, "shop_url": config.CODE_URL,
+                "focus": {"slug": focus["slug"], "title": focus["title"],
+                          "message": focus["settings"].get("focus_message", "")} if focus else None,
+                "jackpot": games.jackpot_winners(conn)}
 
 
 @app.get("/api/games/{slug}")
@@ -104,6 +115,7 @@ def game_info(slug: str):
 class MobileIn(BaseModel):
     mobile: str
     otp_token: str | None = None
+    src: str | None = None   # utm_source of the link the player came from
 
 
 class OtpVerifyIn(BaseModel):
@@ -167,7 +179,7 @@ def play(slug: str, body: MobileIn, request: Request):
     mobile = _mobile(body.mobile)
     otp.check(mobile, body.otp_token)
     with db.session() as conn:
-        return games.play_chance(conn, slug, mobile, admin.client_ip(request))
+        return games.play_chance(conn, slug, mobile, admin.client_ip(request), body.src)
 
 
 @app.post("/api/games/{slug}/quiz/start")
@@ -192,12 +204,36 @@ def winners(slug: str):
         return games.recent_winners(conn, games.get_game(conn, slug))
 
 
+@app.get("/api/jackpot-winners")
+def jackpot_winners():
+    with db.session() as conn:
+        return {"winners": games.jackpot_winners(conn)}
+
+
+class VisitIn(BaseModel):
+    slug: str = "home"
+    src: str | None = None
+
+
+@app.post("/api/visit")
+def visit(body: VisitIn):
+    """Counts page visits per day / page / utm_source for the campaign report (no personal data)."""
+    slug = games.clean_source(body.slug) or "home"
+    with db.session() as conn:
+        if slug != "home" and not conn.execute("SELECT 1 FROM games WHERE slug=?", (slug,)).fetchone():
+            return {"ok": False}
+        conn.execute("INSERT INTO visits (day, slug, source, n) VALUES (?,?,?,1)"
+                     " ON CONFLICT(day, slug, source) DO UPDATE SET n = n + 1",
+                     (local_now().date().isoformat(), slug, games.clean_source(body.src)))
+    return {"ok": True}
+
+
 @app.post("/api/games/{slug}/vault/start")
 def vault_start(slug: str, body: MobileIn, request: Request):
     mobile = _mobile(body.mobile)
     otp.check(mobile, body.otp_token)
     with db.session() as conn:
-        return games.vault_start(conn, slug, mobile, admin.client_ip(request))
+        return games.vault_start(conn, slug, mobile, admin.client_ip(request), body.src)
 
 
 class GuessIn(BaseModel):

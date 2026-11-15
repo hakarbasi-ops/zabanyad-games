@@ -490,19 +490,20 @@ body {
 /* teaser before the start */
 .bf-teaser { text-align: center; padding: 8px 0 4px; }
 .bf-teaser .big { font-size: 64px; line-height: 1.1; }
-.bf-teaser h3 { margin: 8px 0 2px; font-size: 18px; color: #fff; }
-.bf-teaser p { color: var(--bf-muted); margin: 4px 0 14px; }
+.bf-teaser h3 { margin: 8px 0 2px; font-size: 18px; color: var(--dark-2); }
+.theme-bf .bf-teaser h3 { color: #fff; }
+.bf-teaser p { color: var(--bf-muted, var(--dark-4)); margin: 4px 0 14px; }
 .bf-clock { direction: ltr; display: flex; justify-content: center; gap: 8px; }
 .bf-clock div { min-width: 62px; background: #101016; border: 1px solid #3a2f12; border-radius: 12px; padding: 8px 4px; }
 .bf-clock b { display: block; font-family: var(--latin); font-size: 26px; color: var(--gold); font-variant-numeric: tabular-nums; }
 .bf-clock small { display: block; font-size: 11px; color: var(--bf-muted); }
 
 /* home card */
-.game-link.kind-vault {
+.game-link.kind-vault, .game-link.bf-card {
   background: radial-gradient(120% 140% at 0% 100%, #3d2f0c 0%, #121218 60%); color: #fff;
   box-shadow: 0 0 0 1px #4a3a12, 0 10px 26px -12px rgba(255, 197, 61, .45);
 }
-.game-link.kind-vault b { color: #ffc53d; }
+.game-link.kind-vault b, .game-link.bf-card b { color: #ffc53d; }
 .game-link .soon { display: inline-block; margin-top: 8px; font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 99px;
   background: rgba(255, 197, 61, .16); color: #ffc53d; max-width: none; }
 .game-link .tag { position: absolute; top: 12px; left: 12px; font-size: 10px; font-weight: 800; letter-spacing: 1px;
@@ -511,3 +512,28 @@ body {
   .bf-ticker-track { animation: none; position: static; }
   .vault-door { transition-duration: .2s; }
 }
+
+/* Black Friday wheel, winners board, focus banner, campaign result */
+.theme-bf .wheel-hub { background: #17171f; border-color: #ffc53d; }
+.theme-bf .wheel-wrap svg.wheel { filter: drop-shadow(0 8px 24px rgba(255, 197, 61, .25)); }
+.spins-line { text-align: center; color: var(--dark-4); font-size: 13px; margin: 10px 0 0; }
+.theme-bf .spins-line { color: var(--bf-muted); }
+.store-row { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+.store-row .btn { flex: 1 1 30%; margin-top: 0; min-height: 42px; padding: 8px; font-size: 13px; }
+.error .store-row a { font-weight: 700; }
+.jackpot { margin-top: 16px; background: #fff; border-radius: var(--radius-lg); box-shadow: var(--shadow); padding: 14px 16px; }
+.jackpot h3 { margin: 0 0 8px; font-size: 15px; color: var(--dark-2); }
+.jackpot p { margin: 0; color: var(--dark-4); font-size: 13px; }
+.jackpot ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.jackpot li { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; background: #fff7df; font-size: 13px; }
+.jackpot li .m { font-family: var(--latin); direction: ltr; unicode-bidi: isolate; font-weight: 700; color: #7a5b00; }
+.jackpot li small { margin-inline-start: auto; color: var(--dark-4); font-size: 11px; }
+.theme-bf .jackpot { background: var(--bf-card); box-shadow: 0 0 0 1px #4a3a12, 0 20px 40px -24px #000; }
+.theme-bf .jackpot h3 { color: var(--gold); }
+.theme-bf .jackpot p, .theme-bf .jackpot li small { color: var(--bf-muted); }
+.theme-bf .jackpot li { background: #211b0c; color: var(--bf-text); }
+.theme-bf .jackpot li .m { color: var(--gold); }
+.focus-banner { display: block; text-align: center; text-decoration: none; font-weight: 800; margin-bottom: 14px;
+  background: #121218; color: #ffc53d; border-radius: 12px; padding: 12px; box-shadow: 0 0 0 1px #4a3a12; }
+.code-card.best { box-shadow: 0 0 0 2px var(--brand), var(--shadow); }
+.best-tag { font-size: 11px; font-weight: 800; color: #fff; background: var(--brand); border-radius: 99px; padding: 2px 8px; margin-inline-start: 8px; vertical-align: middle; }

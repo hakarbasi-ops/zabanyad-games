@@ -1,6 +1,6 @@
 // Game page: /g/<slug>. Loads the game, asks for the mobile number, plays, shows the code.
 (function () {
-  const { fa, jalaliDate, api, el, store, copy } = window.ZG;
+  const { fa, jalaliDate, api, el, store, copy, visit, dayName } = window.ZG;
   const sfx = window.ZG.sfx;
   const slug = decodeURIComponent(location.pathname.split("/").filter(Boolean).pop() || "");
   const app = document.getElementById("app");
@@ -18,18 +18,21 @@
       return;
     }
     document.title = info.title;
-    if (info.kind === "vault") {
+    visit(slug);
+    if (info.kind === "vault" || info.theme === "bf") {
       document.body.classList.add("theme-bf");
       const meta = document.querySelector('meta[name="theme-color"]');
       if (meta) meta.content = "#0c0c11";
     }
     if (info.color) document.documentElement.style.setProperty("--brand", info.color);
     document.getElementById("eyebrow").textContent = { wheel: "گردونه شانس", scratch: "کارت خراشی", quiz: "چالش کلمه", chest: "صندوق شانس", slot: "ماشین شانس", wordle: "کلمه‌ی مخفی", vault: "ویژه‌ی جمعه سیاه 🖤" }[info.kind] || "";
+    if (info.theme === "bf") document.getElementById("eyebrow").textContent = "ویژه‌ی جمعه سیاه 🖤";
     document.getElementById("title").textContent = info.title;
     document.getElementById("subtitle").textContent = info.subtitle || "";
     document.getElementById("rules").textContent = info.rules || "";
     if (!info.open) {
-      if (info.kind === "vault" && info.teaser && info.starts_at && msLeft(info.starts_at) > 0) renderVaultTeaser();
+      if (info.focus) renderFocusNotice();
+      else if (info.teaser && info.starts_at && msLeft(info.starts_at) > 0) renderVaultTeaser();
       else app.replaceChildren(el("div", { class: "closed" }, info.message));
       return;
     }
@@ -39,7 +42,8 @@
       app.before(el("p", { class: "notice" },
         "حالت آزمایشی: کدهای تخفیف این صفحه ساختگی‌اند (با T شروع می‌شوند) و در زبانیاد کار نمی‌کنند."));
     }
-    app.before(walletBar);
+    if (!info.own_spins) app.before(walletBar);   // games with their own daily spins do not use the shared chances
+    if (info.theme === "bf" || info.kind === "vault") app.after(jackpotBoard(true));
     const saved = store.get("zg:otp");
     if (saved && saved.until > Date.now()) refreshWallet(saved.mobile, saved.token);
   }
@@ -131,7 +135,10 @@
 
   function showError(box, err) {
     box.replaceChildren(err.message);
-    if (err.code === "need_signup" && info.signup_url) {
+    if (err.code === "need_signup" && (info.store_links || []).length) {
+      box.append(el("div", { class: "store-row" }, info.store_links.map((l) =>
+        el("a", { href: l.url, target: "_blank", rel: "noopener" }, `${l.label} ←`))));
+    } else if (err.code === "need_signup" && info.signup_url) {
       box.append(" ", el("a", { href: info.signup_url, target: "_blank", rel: "noopener" }, "ثبت‌نام در زبانیاد ←"));
     }
     box.classList.remove("hidden");
@@ -164,7 +171,7 @@
       }
     }
     try {
-      return { mobile, res: await api(path, { method: "POST", body: { mobile, otp_token, ...(extraBody || {}) } }) };
+      return { mobile, res: await api(path, { method: "POST", body: { mobile, otp_token, src: ZG.src(), ...(extraBody || {}) } }) };
     } catch (e) {
       if (e.code === "need_otp") store.set("zg:otp", null);
       if (e.code === "no_chances") {
@@ -222,7 +229,9 @@
   }
 
   function renderWheel() {
-    const slices = info.slices;
+    const copies = Math.max(1, info.slice_repeat || 1);   // 8 slices on screen = each prize twice
+    const slices = Array.from({ length: copies }, () => info.slices).flat().map((s) =>
+      s.sold_out ? { ...s, color: "#3a3a44", label: "تمام شد" } : s);
     const n = slices.length;
     const seg = 360 / n;
     const R = 160;
@@ -281,7 +290,8 @@
       if (!got) return;
       const { res, mobile } = got;
       const jitter = (Math.random() - 0.5) * seg * 0.6;
-      const target = 360 - (res.prize_index + 0.5) * seg + jitter;
+      const shown = res.prize_index + info.slices.length * Math.floor(Math.random() * copies);
+      const target = 360 - (shown + 0.5) * seg + jitter;
       rotation = rotation - (rotation % 360) + 360 * 6 + target;
       svg.style.transform = `rotate(${rotation}deg)`;
       button.textContent = "در حال چرخش…";
@@ -293,10 +303,21 @@
         showResult({ ...res, mobile });
         button.textContent = "بچرخون!";
         button.disabled = false;
+        if (typeof res.spins_left === "number") {
+          spinsLine.textContent = res.spins_left > 0 ? `امروز ${fa(res.spins_left)} چرخش دیگه داری.` : "چرخش امروزت رو زدی؛ فردا دوباره بیا.";
+        }
       }, reduced ? 1100 : 5400);
     });
 
-    app.replaceChildren(wrap, input, button, box, pastResult() || "");
+    const spinsLine = el("p", { class: "spins-line" });
+    if (info.own_spins) {
+      const o = info.own_spins;
+      spinsLine.textContent = o.bonus && o.bonus_date ? `هر روز ${fa(o.daily)} چرخش، ${dayName(o.bonus_date)} ${fa(o.daily + o.bonus)} چرخش.`
+        : `هر روز ${fa(o.daily)} چرخش.`;
+    }
+    const top = info.theme === "bf" ? eventStrip() : null;
+    app.replaceChildren(top ? top.strip : "", wrap, input, button, info.own_spins ? spinsLine : "", box, pastResult() || "",
+      top ? winnersTicker(top.badges) : "");
   }
 
   // ------------------------------------------------------------ scratch card
@@ -773,14 +794,24 @@
     const g = info.golden;
     const items = [];
     if (g) {
+      const more = info.kind === "vault" ? `${fa(g.boost)} برابر` : "بیشتره";
       items.push(goldenNow
-        ? el("span", { class: "bf-badge hot" }, `🔥 ساعت طلایی! شانس جایزه‌های بزرگ ${fa(g.boost)} برابر`)
-        : el("span", { class: "bf-badge" }, `⏰ ساعت طلایی: هر شب ${fa(g.from)} تا ${fa(g.to)}`));
+        ? el("span", { class: "bf-badge hot" }, `ساعت طلایی! شانس جایزه‌های بزرگ ${more}`)
+        : el("span", { class: "bf-badge" }, `ساعت طلایی: هر شب ${fa(g.from)} تا ${fa(g.to)}`));
     }
+    const below = info.show_left_below || 0;
     for (const l of limited || []) {
-      items.push(l.left > 0
-        ? el("span", { class: "bf-badge" }, `🏆 فقط ${fa(l.left)} تا ${shortLabel(l.label)} مونده`)
-        : el("span", { class: "bf-badge off" }, `${shortLabel(l.label)} تموم شد`));
+      const name = shortLabel(l.label);
+      if (l.left_today === undefined) {
+        items.push(l.left > 0 ? el("span", { class: "bf-badge" }, `فقط ${fa(l.left)} کد ${name} مونده`)
+          : el("span", { class: "bf-badge off" }, `کدهای ${name} تموم شد`));
+      } else if (l.left_today > 0) {
+        if (!below || l.left_today <= below) items.push(el("span", { class: "bf-badge" }, `فقط ${fa(l.left_today)} کد ${name} امروز مونده`));
+      } else if (l.left > 0 && l.next_day) {
+        items.push(el("span", { class: "bf-badge off" }, `کدهای ${name} بعدی: ${dayName(l.next_day)}`));
+      } else if (l.left === 0) {
+        items.push(el("span", { class: "bf-badge off" }, `کدهای ${name} تموم شد`));
+      }
     }
     badges.replaceChildren(...items);
   }
@@ -807,6 +838,29 @@
     return box;
   }
 
+  // Black Friday: other games are paused; send the player to the focus game
+  function renderFocusNotice() {
+    app.replaceChildren(el("div", { class: "bf-teaser" },
+      el("div", { class: "big" }, "🖤"),
+      el("h3", {}, info.message),
+      el("p", {}, "بقیه‌ی بازی‌ها بعد از جمعه سیاه دوباره باز می‌شن."),
+      el("a", { class: "btn", href: `/g/${encodeURIComponent(info.focus.slug)}` }, `رفتن به ${info.focus.title}`)));
+  }
+
+  // «برنده‌های ۹۰٪»: everyone who won the top prize, masked mobiles
+  function jackpotBoard(showEmpty) {
+    const box = el("section", { class: "jackpot hidden" });
+    api("/api/jackpot-winners").then(({ winners }) => {
+      if (!winners.length && !(showEmpty && info && info.open)) return;
+      box.replaceChildren(el("h3", {}, "🏆 برنده‌های ۹۰٪ جمعه سیاه"),
+        winners.length ? el("ol", {}, winners.map((w) => el("li", {},
+          el("span", { class: "m" }, fa(w.mobile)), el("span", {}, w.game), el("small", {}, jalaliDate(w.at, true)))))
+          : el("p", {}, "هنوز کسی ۹۰٪ نبرده؛ شاید تو اولین نفر باشی!"));
+      box.classList.remove("hidden");
+    }).catch(() => {});
+    return box;
+  }
+
   function renderVaultTeaser() {
     const units = [["d", "روز"], ["h", "ساعت"], ["m", "دقیقه"], ["s", "ثانیه"]];
     const cells = Object.fromEntries(units.map(([k]) => [k, el("b")]));
@@ -818,12 +872,14 @@
     };
     const timer = setInterval(upd, 1000);
     upd();
+    const vault = info.kind === "vault";
     app.replaceChildren(el("div", { class: "bf-teaser" },
-      el("div", { class: "big" }, "🔐"),
-      el("h3", {}, "گاوصندوق‌های جمعه سیاه به‌زودی باز می‌شن!"),
-      el("p", {}, `از ${jalaliDate(info.starts_at, true)} بیا رمز گاوصندوق رو پیدا کن و تا ۹۰٪ تخفیف ببر.`),
+      el("div", { class: "big" }, vault ? "🔐" : "🎡"),
+      el("h3", {}, vault ? "گاوصندوق‌های جمعه سیاه به‌زودی باز می‌شن!" : `${info.title} به‌زودی شروع می‌شه!`),
+      el("p", {}, vault ? `از ${jalaliDate(info.starts_at, true)} بیا رمز گاوصندوق رو پیدا کن و تا ۹۰٪ تخفیف ببر.`
+        : `از ${dayName(info.starts_at)} ساعت ${fa(info.starts_at.slice(11, 16))} بچرخون و تا ۹۰٪ تخفیف بگیر.`),
       el("div", { class: "bf-clock" }, units.map(([k, label]) => el("div", {}, cells[k], el("small", {}, label))).reverse()),
-      el("div", { style: "margin-top:18px" }, tiersCard()),
+      vault ? el("div", { style: "margin-top:18px" }, tiersCard()) : "",
       el("a", { class: "btn outline", href: "/" }, "تا اون موقع بقیه‌ی بازی‌ها رو امتحان کن")));
   }
 
@@ -1005,14 +1061,20 @@
       copyBtn.addEventListener("click", async () => {
         copyBtn.textContent = (await copy(res.code)) ? "کپی شد ✓" : "کپی نشد";
       });
+      const campaign = !!info.buy_url;
       body.push(
         el("div", { class: "big" }, percentOf(res.prize_label) >= 90 ? "🏆" : "🎁"),
         el("h2", {}, res.answer && !res.solved ? `پیدا نشد، ولی ${res.prize_label} بردی!` : `تبریک، ${res.prize_label} بردی!`),
         scorePill(res),
+        campaign ? el("p", {}, "کد شخصی تو:") : "",
         el("div", { class: "code-box" }, el("b", {}, res.code), copyBtn),
         info.test_mode ? el("p", { class: "notice" }, "این کد آزمایشی است و در زبانیاد کار نمی‌کند.") : "",
-        el("p", { class: "muted" }, `این کد روی شماره‌ی ${fa(res.mobile || "")} فعال شده و تا ${jalaliDate(res.valid_until)} اعتبار دارد.`),
-        el("a", { class: "btn", href: info.shop_url, target: "_blank", rel: "noopener" }, "وارد کردن کد در زبانیاد"),
+        campaign
+          ? el("p", { class: "muted" }, `تا ${dayName(res.valid_until)} اعتبار داره و فقط با همین شماره (${fa(res.mobile || "")}) کار می‌کنه.`)
+          : el("p", { class: "muted" }, `این کد روی شماره‌ی ${fa(res.mobile || "")} فعال شده و تا ${jalaliDate(res.valid_until)} اعتبار دارد.`),
+        el("a", { class: "btn", href: info.buy_url || info.shop_url, target: "_blank", rel: "noopener" }, campaign ? "خرید در اپ" : "وارد کردن کد در زبانیاد"),
+        campaign && (info.store_links || []).length ? el("div", { class: "store-row" }, info.store_links.map((l) =>
+          el("a", { class: "btn outline", href: l.url, target: "_blank", rel: "noopener" }, l.label))) : "",
       );
       confetti();
       sfx.win(percentOf(res.prize_label) >= 40);

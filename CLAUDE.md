@@ -1,6 +1,6 @@
 # Zabanyad discount games — notes for Claude Code
 
-Seven games: wheel of fortune, scratch card, chest (pick 1 of 3), slot machine, English word quiz, hidden word (Wordle-style), Black Friday vault that give Zabanyad users a real discount code
+Eight games: wheel of fortune, scratch card, chest (pick 1 of 3), slot machine, English word quiz, hidden word (Wordle-style), Black Friday vault, Black Friday wheel that give Zabanyad users a real discount code
 when they win. Owner is non-technical: reply in Persian, plain words. All UI text Persian, RTL, Persian digits
 (`ZG.fa`), Jalali dates (`ZG.jalaliDate`).
 
@@ -72,6 +72,25 @@ Out of chances → bottom sheet pushing the invite (when referrals are on) + lin
   API: `/vault/start`, `/vault/guess`. Page: dark/gold `.theme-bf` (game.css), `renderVault` in play.js, sfx dial/unlock.
   Panel: tier select per prize, «تنظیمات جمعه سیاه» card. Not answered by the owner yet (defaults used): dates, 90% stock,
   whether game codes stack with Zabanyad's own Black Friday discount (ask the backend team).
+
+## Black Friday wheel (v9, slug black-friday-wheel, kind wheel; marketing spec approved by the owner)
+- 5–7 Azar (2026-11-26 00:00 → 11-28 23:59). Generic game settings it uses (any game can): `theme: "bf"` (dark/gold page,
+  event strip, ticker), `own_spins` (daily spins counted per game instead of the shared wallet; `bonus_date`+`bonus_spins` =
+  Friday 2 spins; plays with status need_signup/error do not count), `code_until` (every code ends 9 Azar 23:59 instead of
+  code_valid_days), `slice_repeat` 2 (8 slices = each prize twice; the page picks a copy), `golden_from/to` + per-prize
+  `prizes.golden_weight` (weights 60/25/13/2 → 45/30/20/5 at 20–22), `jackpot_days` (cumulative day caps for stocked prizes:
+  26th 3, 27th 4, 28th 3 = 10; also on the vault, so the 90% exists only on 5–7 Azar), `show_left_below` 4, `focus` +
+  `focus_keep` ["black-friday"] + `focus_message` (while open, /api/games lists only those and other games refuse plays),
+  `buy_url` (zabanyad.com/sub) + `store_links` (default one link to zabanyad.com/links: the sandbox cannot reach zabanyad.com,
+  the three store links are to be typed in the panel). `GET /api/jackpot-winners` = «برنده‌های ۹۰٪» board (home + bf pages).
+  Tracking: `?utm_source=` kept 7 days (common.js `ZG.src`), sent as `src` → `plays.source`; `POST /api/visit` counts page
+  views per day/page/source (table visits); `GET /api/admin/games/{id}/report` (daily: visits, plays, codes per prize,
+  sources, need_signup, signed up after the prompt) shown under every game in the panel; CSV has a «منبع» column.
+- Not possible on our side (tell marketing): code prefix BFW- (Zabanyad makes the code text), «all plans» and «no stacking»
+  (Zabanyad backend rules), «codes used in purchase» (only Nova knows). Spec said «یکشنبه ۹ آذر» but 9 Azar 1405 is Monday;
+  kept 9 Azar (code_until) — owner may change it to 8 Azar in the panel.
+- Vault (v8) now ends 7 Azar too (`db.black_friday_v9` moves 11-29 → 11-28 once on old installs and adds jackpot_days).
+- Marketing guide for both games: `docs/black-friday-fa.md`.
 
 ## Prizes and chances (owner-approved plan, v5)
 - Wheel/scratch (6 slices, NO "empty" prize, min 10%): weights per 1000 → 10%:500, 20%:280, 30%:140, 40%:60,

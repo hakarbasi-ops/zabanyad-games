@@ -113,7 +113,20 @@ CREATE TABLE IF NOT EXISTS otps (
     expires_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS otps_mobile ON otps(mobile, created_at);
+CREATE TABLE IF NOT EXISTS visits (
+    day TEXT NOT NULL,               -- Tehran date
+    slug TEXT NOT NULL,              -- game slug, or "home"
+    source TEXT NOT NULL DEFAULT '', -- utm_source of the link (instagram, telegram, sms, story…)
+    n INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (day, slug, source)
+);
 """
+
+# columns added after the first release: (table, column, definition)
+COLUMNS = [
+    ("prizes", "golden_weight", "INTEGER"),   # chance in the golden hour; NULL = same as weight
+    ("plays", "source", "TEXT"),              # utm_source the player came from
+]
 
 # Serialises the "check limits + reserve prize" step so two requests cannot both take the last prize.
 LOCK = threading.Lock()
@@ -150,11 +163,16 @@ def transaction(conn: sqlite3.Connection):
 def init() -> None:
     with session() as conn:
         conn.executescript(SCHEMA)
+        for table, column, definition in COLUMNS:
+            have = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+            if column not in have:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
         if not conn.execute("SELECT 1 FROM games LIMIT 1").fetchone():
             seed(conn)
         else:
             add_missing_games(conn)
         apply_prize_plan(conn)
+        black_friday_v9(conn)
 
 
 def row(r: sqlite3.Row | None) -> dict | None:
@@ -178,6 +196,9 @@ def rows(rs) -> list[dict]:
 
 # Zabanyad design-system palette: brand orange, lighter, info, subtle
 DEFAULT_COLORS = ["#F26600", "#FCE0CC", "#33357D", "#F7A366"]
+
+# the 90% prizes are handed out only on the three Black Friday days: at most this many by the end of each day
+JACKPOT_DAYS = {"2026-11-26": 3, "2026-11-27": 4, "2026-11-28": 3}
 
 SEED_GAMES = [
     {
@@ -263,10 +284,34 @@ SEED_GAMES = [
                  "در ساعت طلایی شانس جایزه‌های بزرگ دو برابر است.",
         "enabled": 1,
         "starts_at": "2026-11-23T00:00",   # 2 Azar 1405
-        "ends_at": "2026-11-29T23:59",     # 8 Azar 1405
+        "ends_at": "2026-11-28T23:59",     # 7 Azar 1405, end of Black Friday
         "settings": {"color": "#FFC53D", "teaser": True, "gold_max": 3, "silver_max": 5,
                      "golden_from": 20, "golden_to": 22, "golden_boost": 2,
-                     "bonus_date": "2026-11-27", "bonus_chances": 1},   # Friday 6 Azar: one extra chance
+                     "bonus_date": "2026-11-27", "bonus_chances": 1,   # Friday 6 Azar: one extra chance
+                     "jackpot_days": JACKPOT_DAYS},
+    },
+    {
+        # Black Friday wheel (marketing spec, Nov 2026): own daily spins, fixed code end date, takes over the site
+        "slug": "black-friday-wheel",
+        "kind": "wheel",
+        "title": "گردونه‌ی جمعه سیاه زبانیاد",
+        "subtitle": "بچرخون و تا ۹۰٪ تخفیف اشتراک زبانیاد بگیر. هر روز یک بار، جمعه دو بار.",
+        "rules": "هر شماره روزی یک چرخش دارد و جمعه ۶ آذر دو چرخش. همه برنده‌اند: از ۵۰٪ تا ۹۰٪ تخفیف اشتراک. "
+                 "کد شخصی و یک‌بارمصرف است، فقط با همان شماره در زبانیاد کار می‌کند و تا ۹ آذر اعتبار دارد.",
+        "enabled": 1,
+        "starts_at": "2026-11-26T00:00",   # 5 Azar
+        "ends_at": "2026-11-28T23:59",     # 7 Azar
+        "settings": {
+            "theme": "bf", "color": "#FFC53D", "teaser": True, "slice_repeat": 2,
+            "own_spins": 1, "bonus_date": "2026-11-27", "bonus_spins": 1,
+            "golden_from": 20, "golden_to": 22,
+            "code_until": "2026-11-30T23:59",          # Sunday 9 Azar
+            "jackpot_days": JACKPOT_DAYS, "show_left_below": 4,
+            "focus": True, "focus_keep": ["black-friday"],
+            "focus_message": "تا ۷ آذر فقط گردونه‌ی جمعه سیاه فعاله",
+            "buy_url": "https://zabanyad.com/sub",
+            "store_links": [{"label": "نصب اپ زبانیاد", "url": "https://zabanyad.com/links"}],
+        },
     },
 ]
 
@@ -325,6 +370,36 @@ VAULT_PLAN = [
 ]
 
 
+# Black Friday wheel: (label, percent, weight, golden-hour weight, stock, colour); 8 slices = each prize twice
+BF_WHEEL_PLAN = [
+    ("۵۰٪ تخفیف", 50, 60, 45, None, "#17171F"),
+    ("۶۰٪ تخفیف", 60, 25, 30, None, "#FFC53D"),
+    ("۷۰٪ تخفیف", 70, 13, 20, None, "#2A2A35"),
+    ("۹۰٪ تخفیف", 90, 2, 5, 10, "#FFE08A"),
+]
+
+
+def insert_bf_wheel_plan(conn: sqlite3.Connection, game_id: int) -> None:
+    for i, (label, pct, weight, golden, stock, color) in enumerate(BF_WHEEL_PLAN):
+        conn.execute("INSERT INTO prizes (game_id, label, kind, amount, max_amount, weight, golden_weight, stock, color,"
+                     " sort) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                     (game_id, label, "percentage", pct, NO_CAP, weight, golden, stock, color, i))
+
+
+def black_friday_v9(conn: sqlite3.Connection) -> None:
+    """Once, on installs that got the vault in v8: end it with Black Friday (7 Azar), 90% only on 5–7 Azar."""
+    if conn.execute("SELECT 1 FROM settings WHERE key='black_friday_v9'").fetchone():
+        return
+    r = conn.execute("SELECT id, ends_at, settings FROM games WHERE slug='black-friday'").fetchone()
+    if r:
+        cfg = json.loads(r["settings"] or "{}")
+        cfg.setdefault("jackpot_days", JACKPOT_DAYS)
+        ends = "2026-11-28T23:59" if r["ends_at"] == "2026-11-29T23:59" else r["ends_at"]
+        conn.execute("UPDATE games SET ends_at=?, settings=? WHERE id=?",
+                     (ends, json.dumps(cfg, ensure_ascii=False), r["id"]))
+    conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('black_friday_v9', '1')")
+
+
 def insert_vault_plan(conn: sqlite3.Connection, game_id: int) -> None:
     for i, (label, pct, tier, weight, stock, color) in enumerate(VAULT_PLAN):
         conn.execute("INSERT INTO prizes (game_id, label, kind, amount, max_amount, weight, stock, min_score, color,"
@@ -353,6 +428,9 @@ def apply_prize_plan(conn: sqlite3.Connection) -> None:
             conn.execute("UPDATE prizes SET deleted=1, active=0 WHERE game_id=?", (g["id"],))
             if g["kind"] == "vault":
                 insert_vault_plan(conn, g["id"])
+                rows = []
+            elif g["slug"] == "black-friday-wheel":
+                insert_bf_wheel_plan(conn, g["id"])
                 rows = []
             elif g["kind"] in ("quiz", "wordle"):
                 plan = QUIZ_PLAN if g["kind"] == "quiz" else WORDLE_PLAN

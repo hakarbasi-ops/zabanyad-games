@@ -26,17 +26,24 @@
   <script src="/static/js/otp.js"></script>
   <script>
     (async () => {
-      const { api, el, jalaliDate } = window.ZG;
+      const { api, el, jalaliDate, fa } = window.ZG;
+      ZG.visit("home");
       const list = document.getElementById("list");
       const icons = { wheel: "🎡", scratch: "🎟️", quiz: "🔤", chest: "🎁", slot: "🎰", wordle: "🧩", vault: "🔐" };
       try {
-        const { games } = await api("/api/games");
+        const { games, focus, jackpot } = await api("/api/games");
+        if (focus) list.before(el("a", { class: "focus-banner", href: `/g/${encodeURIComponent(focus.slug)}` }, focus.message || focus.title, " ←"));
+        if (jackpot && jackpot.length) {
+          list.after(el("section", { class: "jackpot" }, el("h3", {}, "🏆 برنده‌های ۹۰٪ جمعه سیاه"),
+            el("ol", {}, jackpot.slice(0, 10).map((w) => el("li", {}, el("span", { class: "m" }, fa(w.mobile)),
+              el("span", {}, w.game), el("small", {}, jalaliDate(w.at, true)))))));
+        }
         list.replaceChildren(...(games.length ? games.map((g) =>
-          el("a", { class: `game-link kind-${g.kind}`, href: `/g/${encodeURIComponent(g.slug)}` },
-            g.kind === "vault" ? el("span", { class: "tag" }, "BLACK FRIDAY") : "",
+          el("a", { class: `game-link kind-${g.kind} ${g.theme === "bf" ? "bf-card" : ""}`, href: `/g/${encodeURIComponent(g.slug)}` },
+            g.theme === "bf" ? el("span", { class: "tag" }, "BLACK FRIDAY") : "",
             el("b", {}, g.title), el("span", {}, g.subtitle),
             g.soon ? el("span", { class: "soon" }, `به‌زودی · شروع ${jalaliDate(g.starts_at, true)}`)
-              : g.kind === "vault" && g.ends_at ? el("span", { class: "soon" }, `فقط تا ${jalaliDate(g.ends_at)}`) : "",
+              : g.theme === "bf" && g.ends_at ? el("span", { class: "soon" }, `فقط تا ${jalaliDate(g.ends_at)}`) : "",
             el("i", { class: "icon", "aria-hidden": "true" }, icons[g.kind] || "🎁"))) :
           [el("div", { class: "card closed" }, "فعلاً بازی فعالی نداریم. به‌زودی برمی‌گردیم!")]));
       } catch (e) {

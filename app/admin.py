@@ -100,6 +100,7 @@ class PrizeIn(BaseModel):
     max_amount: int = Field(0, ge=0)
     usage_count: int = Field(1, ge=1, le=100)
     weight: int = Field(1, ge=0, le=100000)
+    golden_weight: int | None = Field(None, ge=0, le=100000)   # chance in the golden hour (None = same as weight)
     stock: int | None = Field(None, ge=0)
     min_score: int = Field(0, ge=0, le=100)
     color: str = ""
@@ -173,6 +174,82 @@ def _check_prizes(kind: str, prizes: list[PrizeIn]) -> None:
             raise HTTPException(400, f"«{p.label}»: مبلغ تخفیف را وارد کنید.")
         if p.kind == "percentage" and p.max_amount <= 0 and p.active:
             raise HTTPException(400, f"«{p.label}»: سقف تخفیف (ریال) را وارد کنید.")
+
+
+def _clean_campaign(settings: dict) -> None:
+    """Black Friday settings typed in the panel (wheel and vault)."""
+    day = re.compile(r"\d{4}-\d{2}-\d{2}")
+    if "jackpot_days" in settings:
+        days = settings.get("jackpot_days") or {}
+        try:
+            settings["jackpot_days"] = {d: max(0, min(int(n), 1000)) for d, n in dict(days).items() if day.fullmatch(d)}
+        except (TypeError, ValueError):
+            raise HTTPException(400, "سهم روزانه‌ی جایزه‌ی محدود درست نیست.")
+    for key in ("code_until",):
+        if key in settings and settings[key] and not games.parse_local(str(settings[key])):
+            raise HTTPException(400, "تاریخ پایان اعتبار کدها درست نیست.")
+    for key, lo, hi in (("own_spins", 0, 20), ("bonus_spins", 0, 20), ("show_left_below", 0, 1000),
+                        ("golden_from", 0, 23), ("golden_to", 1, 24)):
+        if key in settings:
+            try:
+                settings[key] = max(lo, min(hi, int(settings[key])))
+            except (TypeError, ValueError):
+                raise HTTPException(400, "یکی از عددهای تنظیمات درست نیست.")
+    if "bonus_date" in settings and not day.fullmatch(str(settings.get("bonus_date") or "")):
+        settings["bonus_date"] = ""
+    if "store_links" in settings:
+        links = []
+        for item in settings.get("store_links") or []:
+            url = str((item or {}).get("url", "")).strip()
+            if re.fullmatch(r"https?://\S+", url):
+                links.append({"label": str(item.get("label", "")).strip()[:40] or "نصب اپ", "url": url})
+        settings["store_links"] = links[:6]
+    if "buy_url" in settings and not re.fullmatch(r"(https?://\S+)?", str(settings.get("buy_url") or "")):
+        raise HTTPException(400, "نشانی خرید در اپ درست نیست.")
+
+
+@router.get("/games/{game_id}/report", dependencies=[Depends(require_admin)])
+def campaign_report(game_id: int):
+    """Daily report for the marketing team: visits, spins, codes per prize, by source, and players who came back
+    with a code after being told to sign up first."""
+    with db.session() as conn:
+        game = _game_full(conn, game_id)
+        plays_ = db.rows(conn.execute("SELECT mobile, status, prize_label, source, created_at FROM plays"
+                                      " WHERE game_id=? ORDER BY id", (game_id,)))
+        visits = db.rows(conn.execute("SELECT day, source, n FROM visits WHERE slug=?", (game["slug"],)))
+    days: dict[str, dict] = {}
+
+    def bucket(day: str) -> dict:
+        return days.setdefault(day, {"day": day, "visits": 0, "plays": 0, "codes": 0, "need_signup": 0,
+                                     "signed_up": 0, "prizes": defaultdict(int), "sources": defaultdict(int),
+                                     "visit_sources": defaultdict(int)})
+    for v in visits:
+        b = bucket(v["day"])
+        b["visits"] += v["n"]
+        b["visit_sources"][v["source"] or "مستقیم"] += v["n"]
+    asked: set[str] = set()
+    counted: set[str] = set()
+    for p in plays_:
+        day = datetime.fromisoformat(p["created_at"]).astimezone(TZ).date().isoformat()
+        b = bucket(day)
+        if p["status"] == "need_signup":
+            b["need_signup"] += 1
+            asked.add(p["mobile"])
+            continue
+        if p["status"] not in ("won", "lost"):
+            continue
+        b["plays"] += 1
+        b["sources"][p["source"] or "مستقیم"] += 1
+        if p["status"] == "won":
+            b["codes"] += 1
+            b["prizes"][p["prize_label"]] += 1
+            if p["mobile"] in asked and p["mobile"] not in counted:
+                counted.add(p["mobile"])
+                b["signed_up"] += 1
+    out = sorted(days.values(), key=lambda d: d["day"], reverse=True)
+    for d in out:
+        d["prizes"], d["sources"], d["visit_sources"] = dict(d["prizes"]), dict(d["sources"]), dict(d["visit_sources"])
+    return {"days": out}
 
 
 @router.get("/games", dependencies=[Depends(require_admin)])
@@ -254,6 +331,7 @@ def update_game(game_id: int, body: GameIn):
             settings["teaser"] = bool(settings.get("teaser", True))
             if not re.fullmatch(r"\d{4}-\d{2}-\d{2}", str(settings.get("bonus_date") or "")):
                 settings["bonus_date"] = ""
+        _clean_campaign(settings)
         if "color" in settings and not re.fullmatch(r"#[0-9a-fA-F]{6}", str(settings["color"] or "")):
             settings["color"] = ""
 
@@ -268,15 +346,16 @@ def update_game(game_id: int, body: GameIn):
             existing = {p["id"] for p in game["prizes"]}
             kept = set()
             for i, p in enumerate(body.prizes):
-                values = (p.label, p.kind, p.amount, p.max_amount, p.usage_count, p.weight, p.stock,
+                values = (p.label, p.kind, p.amount, p.max_amount, p.usage_count, p.weight, p.golden_weight, p.stock,
                           p.min_score, p.color or db.DEFAULT_COLORS[i % len(db.DEFAULT_COLORS)], i, int(p.active))
                 if p.id in existing:
                     kept.add(p.id)
                     conn.execute("UPDATE prizes SET label=?, kind=?, amount=?, max_amount=?, usage_count=?, weight=?,"
-                                 " stock=?, min_score=?, color=?, sort=?, active=? WHERE id=?", (*values, p.id))
+                                 " golden_weight=?, stock=?, min_score=?, color=?, sort=?, active=? WHERE id=?",
+                                 (*values, p.id))
                 else:
-                    conn.execute("INSERT INTO prizes (label, kind, amount, max_amount, usage_count, weight, stock,"
-                                 " min_score, color, sort, active, game_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                    conn.execute("INSERT INTO prizes (label, kind, amount, max_amount, usage_count, weight, golden_weight,"
+                                 " stock, min_score, color, sort, active, game_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
                                  (*values, game_id))
             for pid in existing - kept:  # removed rows stay for old plays' history
                 conn.execute("UPDATE prizes SET deleted=1, active=0 WHERE id=?", (pid,))
@@ -404,12 +483,12 @@ def plays_csv(game_id: int | None = None, status: str | None = None, q: str | No
     buf = io.StringIO()
     buf.write("﻿")  # Excel opens Persian UTF-8 correctly with a BOM
     w = csv.writer(buf)
-    w.writerow(["ردیف", "زمان (تهران)", "بازی", "موبایل", "وضعیت", "جایزه", "کد تخفیف", "اعتبار تا", "امتیاز"])
+    w.writerow(["ردیف", "زمان (تهران)", "بازی", "موبایل", "وضعیت", "جایزه", "کد تخفیف", "اعتبار تا", "امتیاز", "منبع"])
     for p in items:
         when = datetime.fromisoformat(p["created_at"]).astimezone(TZ).strftime("%Y-%m-%d %H:%M")
         score = f"{p['score']}/{p['total']}" if p["score"] is not None else ""
         w.writerow([p["id"], when, p["game"], p["mobile"], STATUS_FA.get(p["status"], p["status"]),
-                    p["prize_label"], p["code"] or "", p["valid_until"] or "", score])
+                    p["prize_label"], p["code"] or "", p["valid_until"] or "", score, p.get("source") or ""])
     return StreamingResponse(iter([buf.getvalue()]), media_type="text/csv; charset=utf-8",
                              headers={"Content-Disposition": 'attachment; filename="plays.csv"'})
 

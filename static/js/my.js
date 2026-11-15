@@ -60,6 +60,14 @@
     }
     const w = data.wallet;
     const active = data.codes.filter((c) => !c.expired);
+    // with several codes, the biggest discount comes first and is marked; all of them stay valid
+    const pct = (c) => Number(String(c.prize_label).replace(/[۰-۹]/g, (d) => "۰۱۲۳۴۵۶۷۸۹".indexOf(d)).match(/\d+/)?.[0] || 0);
+    if (active.length > 1) {
+      const best = active.reduce((a, c) => (pct(c) > pct(a) ? c : a));
+      best.best = true;
+      active.splice(active.indexOf(best), 1);
+      active.unshift(best);
+    }
     const expired = data.codes.filter((c) => c.expired);
     root.replaceChildren(
       el("div", { class: "wallet" },
@@ -87,9 +95,9 @@
     else badge = `${fa(days)} روز مونده`;
     const copyBtn = el("button", { type: "button" }, "کپی");
     copyBtn.addEventListener("click", async () => { copyBtn.textContent = (await copy(c.code)) ? "کپی شد ✓" : "کپی نشد"; });
-    return el("article", { class: `code-card ${c.expired ? "expired" : ""}` },
+    return el("article", { class: `code-card ${c.expired ? "expired" : ""} ${c.best ? "best" : ""}` },
       el("div", { class: "code-head" },
-        el("b", {}, c.prize_label),
+        el("b", {}, c.prize_label, c.best ? el("span", { class: "best-tag" }, "بهترین کدت") : ""),
         el("span", { class: `code-badge ${cls}` }, badge)),
       el("div", { class: "code-box" }, el("b", {}, c.code), c.expired ? "" : copyBtn),
       el("p", { class: "code-meta" }, `${c.game} · اعتبار تا ${jalaliDate(c.valid_until, true)}`),

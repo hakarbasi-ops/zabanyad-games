@@ -1,0 +1,97 @@
+from datetime import datetime
+
+from app import db, games, wallet
+from app.util import TZ, local_now
+from conftest import enable
+
+SLUG = "black-friday-wheel"
+
+
+def _open(admin, **settings):
+    g = next(g for g in admin.get("/api/admin/games").json() if g["slug"] == SLUG)
+    full = admin.get(f"/api/admin/games/{g['id']}").json()
+    today = local_now().date().isoformat()
+    full["settings"].update({"jackpot_days": {today: 3}, **settings})
+    return enable(admin, SLUG, starts_at=None, ends_at=None, settings=full["settings"])
+
+
+def test_seeded_wheel(admin):
+    g = next(g for g in admin.get("/api/admin/games").json() if g["slug"] == SLUG)
+    assert g["kind"] == "wheel" and g["enabled"] and g["starts_at"].startswith("2026-11-26")
+    full = admin.get(f"/api/admin/games/{g['id']}").json()
+    assert [(p["amount"], p["weight"], p["golden_weight"], p["stock"]) for p in full["prizes"]] == \
+        [(50, 60, 45, None), (60, 25, 30, None), (70, 13, 20, None), (90, 2, 5, 10)]
+    vault = next(x for x in admin.get("/api/admin/games").json() if x["slug"] == "black-friday")
+    assert vault["ends_at"] == "2026-11-28T23:59" and vault["settings"]["jackpot_days"]["2026-11-27"] == 4
+
+
+def test_own_spins_and_fixed_code_date(admin):
+    _open(admin, bonus_date="")
+    r = admin.post(f"/api/games/{SLUG}/play", json={"mobile": "09120000961", "src": "Instagram!"}).json()
+    assert r["result"] == "won" and r["valid_until"] == "2026-11-30 23:59:59" and r["spins_left"] == 0
+    with db.session() as conn, db.LOCK, db.transaction(conn):  # shared chances untouched
+        assert wallet.ensure(conn, "09120000961")["chances"] == 3
+    again = admin.post(f"/api/games/{SLUG}/play", json={"mobile": "09120000961"})
+    assert again.status_code == 429 and again.json()["code"] == "no_spins"
+    with db.session() as conn:
+        assert conn.execute("SELECT source FROM plays ORDER BY id DESC LIMIT 1").fetchone()[0] == "instagram"
+
+
+def test_friday_gets_two_spins(admin):
+    _open(admin, bonus_date=local_now().date().isoformat(), bonus_spins=1)
+    for left in (1, 0):
+        assert admin.post(f"/api/games/{SLUG}/play", json={"mobile": "09120000962"}).json()["spins_left"] == left
+
+
+def test_focus_mode_hides_other_games(admin):
+    enable(admin, "wheel")
+    _open(admin)
+    listed = admin.get("/api/games").json()
+    assert {g["slug"] for g in listed["games"]} <= {SLUG, "black-friday"} and listed["focus"]["slug"] == SLUG
+    info = admin.get("/api/games/wheel").json()
+    assert info["open"] is False and info["focus"]["slug"] == SLUG and "گردونه‌ی جمعه سیاه" in info["message"]
+    assert admin.post("/api/games/wheel/play", json={"mobile": "09120000963"}).status_code == 400
+
+
+def test_jackpot_day_plan():
+    g = {"settings": {"jackpot_days": {"2026-11-26": 3, "2026-11-27": 4, "2026-11-28": 3}}}
+    assert games.jackpot_cap(g, "2026-11-25") == 0
+    assert games.jackpot_cap(g, "2026-11-26") == 3
+    assert games.jackpot_cap(g, "2026-11-27") == 7
+    assert games.jackpot_cap(g, "2026-11-30") == 10
+    p = {"stock": 10, "given": 3}
+    assert not games._in_day_plan(g, p, 3) and games._in_day_plan(g, p, 7)
+
+
+def test_golden_weights():
+    g = {"settings": {"golden_from": 20, "golden_to": 22}}
+    prizes = [{"weight": 60, "golden_weight": 45}, {"weight": 2, "golden_weight": None}]
+    assert games.in_golden_hour(g, datetime(2026, 11, 27, 21, tzinfo=TZ))
+    assert not games.in_golden_hour(g, datetime(2026, 11, 27, 19, tzinfo=TZ))
+
+
+def test_jackpot_board_and_sold_out_slice(admin):
+    full = _open(admin)
+    for p in full["prizes"]:
+        p["weight"] = 1 if p["amount"] == 90 else 0
+        p["golden_weight"] = None
+    full["prizes"][0]["weight"] = 0
+    assert admin.put(f"/api/admin/games/{full['id']}", json=full).status_code == 200
+    for i in range(3):
+        assert admin.post(f"/api/games/{SLUG}/play", json={"mobile": f"0912000097{i}"}).json()["prize_label"] == "۹۰٪ تخفیف"
+    board = admin.get("/api/jackpot-winners").json()["winners"]
+    assert len(board) == 3 and board[0]["mobile"] == "0912***0972"
+    info = admin.get(f"/api/games/{SLUG}").json()
+    assert info["slices"][3]["sold_out"] is True and info["limited"][0]["left_today"] == 0
+    # today's 3 are gone: nothing else has weight, so the play is refused without spending the spin
+    assert admin.post(f"/api/games/{SLUG}/play", json={"mobile": "09120000979"}).status_code == 409
+
+
+def test_report_and_visits(admin):
+    full = _open(admin)
+    admin.post("/api/visit", json={"slug": SLUG, "src": "telegram"})
+    admin.post("/api/visit", json={"slug": "nope", "src": "x"})
+    admin.post(f"/api/games/{SLUG}/play", json={"mobile": "09120000981", "src": "telegram"})
+    day = admin.get(f"/api/admin/games/{full['id']}/report").json()["days"][0]
+    assert day["visits"] == 1 and day["plays"] == 1 and day["codes"] == 1 and day["sources"] == {"telegram": 1}
+    assert day["visit_sources"] == {"telegram": 1}

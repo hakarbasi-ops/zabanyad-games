@@ -121,5 +121,28 @@
     if (ref && /^[A-Za-z0-9]{4,12}$/.test(ref)) store.set("zg:ref", ref.toUpperCase());
   } catch (e) { /* ignore */ }
 
-  window.ZG = { fa, money, jalaliDate, api, el, store, copy };
+  // campaign links carry ?utm_source=instagram|telegram|sms|story: remember it for 7 days for the report
+  let src = "";
+  try {
+    const fromUrl = (new URLSearchParams(location.search).get("utm_source") || "").toLowerCase().replace(/[^a-z0-9_-]/g, "").slice(0, 30);
+    const saved = store.get("zg:src");
+    if (fromUrl) store.set("zg:src", { v: fromUrl, until: Date.now() + 7 * 864e5 });
+    src = fromUrl || (saved && saved.until > Date.now() ? saved.v : "");
+  } catch (e) { /* ignore */ }
+  // counts a visit of this page (home or a game) per day and source; no personal data
+  function visit(slug) {
+    fetch("/api/visit", { method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ slug, src }), keepalive: true }).catch(() => {});
+  }
+
+  const WEEKDAYS = ["یکشنبه", "دوشنبه", "سه‌شنبه", "چهارشنبه", "پنجشنبه", "جمعه", "شنبه"];
+  // "2026-11-30 23:59:59" -> "یکشنبه ۹ آذر"
+  function dayName(value) {
+    const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(value || "");
+    if (!m) return "";
+    const wd = WEEKDAYS[new Date(Date.UTC(+m[1], m[2] - 1, +m[3])).getUTCDay()];
+    return `${wd} ${jalaliDate(`${m[1]}-${m[2]}-${m[3]} 12:00`).replace(/\s[۰-۹]{4}$/, "")}`;
+  }
+
+  window.ZG = { fa, money, jalaliDate, api, el, store, copy, src: () => src, visit, dayName };
 })();
