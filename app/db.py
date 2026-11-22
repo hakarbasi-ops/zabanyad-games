@@ -173,6 +173,7 @@ def init() -> None:
             add_missing_games(conn)
         apply_prize_plan(conn)
         black_friday_v9(conn)
+        allowed_percents_v12(conn)
 
 
 def row(r: sqlite3.Row | None) -> dict | None:
@@ -196,6 +197,9 @@ def rows(rs) -> list[dict]:
 
 # Zabanyad design-system palette: brand orange, lighter, info, subtle
 DEFAULT_COLORS = ["#F26600", "#FCE0CC", "#33357D", "#F7A366"]
+
+# Zabanyad's discounts exist in the app stores only as these SKUs: any other percentage would not work
+ALLOWED_PERCENTS = (10, 20, 30, 40, 50, 90)
 
 # the 90% prizes are handed out only on the three Black Friday days: at most this many by the end of each day
 JACKPOT_DAYS = {"2026-11-26": 3, "2026-11-27": 4, "2026-11-28": 3}
@@ -279,7 +283,7 @@ SEED_GAMES = [
         "title": "گاوصندوق جمعه سیاه",
         "subtitle": "رمز گاوصندوق رو پیدا کن؛ هرچی زودتر، گاوصندوق بهتر!",
         "rules": "یک شانس، ۶ حدس برای رمز ۴ رقمی (رقم‌ها تکراری نیستند). سبز یعنی رقم درست سر جای درست، زرد یعنی "
-                 "این رقم در رمز هست ولی جای دیگر. در ۱ تا ۳ حدس گاوصندوق طلایی (۵۰ تا ۹۰٪)، در ۴ یا ۵ حدس "
+                 "این رقم در رمز هست ولی جای دیگر. در ۱ تا ۳ حدس گاوصندوق طلایی (۵۰ یا ۹۰٪)، در ۴ یا ۵ حدس "
                  "گاوصندوق نقره‌ای (۳۰ تا ۵۰٪) و در هر صورت حداقل گاوصندوق برنزی (۲۰ یا ۳۰٪). "
                  "در ساعت طلایی شانس جایزه‌های بزرگ دو برابر است.",
         "enabled": 1,
@@ -296,7 +300,7 @@ SEED_GAMES = [
         "kind": "wheel",
         "title": "گردونه‌ی جمعه سیاه زبانیاد",
         "subtitle": "بچرخون و تا ۹۰٪ تخفیف اشتراک زبانیاد بگیر. هر روز یک بار، جمعه دو بار.",
-        "rules": "هر شماره روزی یک چرخش دارد و جمعه ۶ آذر دو چرخش. همه برنده‌اند: از ۵۰٪ تا ۹۰٪ تخفیف اشتراک. "
+        "rules": "هر شماره روزی یک چرخش دارد و جمعه ۶ آذر دو چرخش. همه برنده‌اند: از ۳۰٪ تا ۹۰٪ تخفیف اشتراک. "
                  "کد شخصی و یک‌بارمصرف است، فقط با همان شماره در زبانیاد کار می‌کند و تا ۹ آذر اعتبار دارد.",
         "enabled": 1,
         "starts_at": "2026-11-26T00:00",   # 5 Azar
@@ -364,19 +368,19 @@ VAULT_PLAN = [
     ("۳۰٪ تخفیف", 30, 2, 60, None, "#C0C0C0"),
     ("۴۰٪ تخفیف", 40, 2, 30, None, "#C0C0C0"),
     ("۵۰٪ تخفیف", 50, 2, 10, None, "#C0C0C0"),
-    ("۵۰٪ تخفیف", 50, 3, 70, None, "#FFC53D"),
-    ("۷۰٪ تخفیف", 70, 3, 28, None, "#FFC53D"),
+    ("۵۰٪ تخفیف", 50, 3, 98, None, "#FFC53D"),
     ("۹۰٪ تخفیف", 90, 3, 2, 10, "#FFC53D"),
 ]
 
 
 # Black Friday wheel: (label, percent, weight, golden-hour weight, stock, colour); 8 slices = each prize twice
-BF_WHEEL_PLAN = [
-    ("۵۰٪ تخفیف", 50, 60, 45, None, "#17171F"),
-    ("۶۰٪ تخفیف", 60, 25, 30, None, "#FFC53D"),
-    ("۷۰٪ تخفیف", 70, 13, 20, None, "#2A2A35"),
+BF_WHEEL_PLAN = [   # owner, Nov 2026: only the percentages that have store SKUs; 30 most likely … 90 very rare
+    ("۳۰٪ تخفیف", 30, 60, 45, None, "#17171F"),
+    ("۴۰٪ تخفیف", 40, 28, 32, None, "#FFC53D"),
+    ("۵۰٪ تخفیف", 50, 10, 18, None, "#2A2A35"),
     ("۹۰٪ تخفیف", 90, 2, 5, 10, "#FFE08A"),
 ]
+OLD_BF_WHEEL_AMOUNTS = [50, 60, 70, 90]   # v9–v11 plan (60/70 have no store SKU)
 
 
 def insert_bf_wheel_plan(conn: sqlite3.Connection, game_id: int) -> None:
@@ -398,6 +402,38 @@ def black_friday_v9(conn: sqlite3.Connection) -> None:
         conn.execute("UPDATE games SET ends_at=?, settings=? WHERE id=?",
                      (ends, json.dumps(cfg, ensure_ascii=False), r["id"]))
     conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('black_friday_v9', '1')")
+
+
+def allowed_percents_v12(conn: sqlite3.Connection) -> None:
+    """Once: drop the 60/70% prizes (no store SKU). Vault: the gold 70% goes and its weight moves to the gold 50%.
+    Wheel: if it still has the v9 plan, it gets 30/40/50/90."""
+    if conn.execute("SELECT 1 FROM settings WHERE key='allowed_percents_v12'").fetchone():
+        return
+    conn.execute("BEGIN IMMEDIATE")
+    try:
+        vault = conn.execute("SELECT id FROM games WHERE slug='black-friday'").fetchone()
+        if vault:
+            for p in conn.execute("SELECT id, weight, min_score FROM prizes WHERE game_id=? AND deleted=0 AND kind='percentage'"
+                                  " AND amount=70", (vault["id"],)).fetchall():
+                conn.execute("UPDATE prizes SET deleted=1, active=0 WHERE id=?", (p["id"],))
+                conn.execute("UPDATE prizes SET weight = weight + ? WHERE id = (SELECT id FROM prizes WHERE game_id=?"
+                             " AND deleted=0 AND active=1 AND min_score=? AND amount=50 LIMIT 1)",
+                             (p["weight"], vault["id"], p["min_score"]))
+            conn.execute("UPDATE games SET rules=replace(rules, 'طلایی (۵۰ تا ۹۰٪)', 'طلایی (۵۰ یا ۹۰٪)') WHERE id=?",
+                         (vault["id"],))
+        wheel = conn.execute("SELECT id FROM games WHERE slug='black-friday-wheel'").fetchone()
+        if wheel:
+            amounts = [r[0] for r in conn.execute("SELECT amount FROM prizes WHERE game_id=? AND deleted=0 ORDER BY sort, id",
+                                                  (wheel["id"],))]
+            if amounts == OLD_BF_WHEEL_AMOUNTS:
+                conn.execute("UPDATE prizes SET deleted=1, active=0 WHERE game_id=?", (wheel["id"],))
+                insert_bf_wheel_plan(conn, wheel["id"])
+            conn.execute("UPDATE games SET rules=replace(rules, 'از ۵۰٪ تا ۹۰٪', 'از ۳۰٪ تا ۹۰٪') WHERE id=?", (wheel["id"],))
+        conn.execute("INSERT OR REPLACE INTO settings (key, value) VALUES ('allowed_percents_v12', '1')")
+    except BaseException:
+        conn.execute("ROLLBACK")
+        raise
+    conn.execute("COMMIT")
 
 
 def insert_vault_plan(conn: sqlite3.Connection, game_id: int) -> None:

@@ -20,7 +20,7 @@ def test_seeded_as_event_with_teaser(admin):
     assert g["kind"] == "vault" and g["enabled"] and g["starts_at"].startswith("2026-11-23")
     full = admin.get(f"/api/admin/games/{g['id']}").json()
     tiers = {t: [p["amount"] for p in full["prizes"] if p["min_score"] == t] for t in (1, 2, 3)}
-    assert tiers == {1: [20, 30], 2: [30, 40, 50], 3: [50, 70, 90]}
+    assert tiers == {1: [20, 30], 2: [30, 40, 50], 3: [50, 90]}
     assert next(p for p in full["prizes"] if p["amount"] == 90)["stock"] == 10
 
 
@@ -46,7 +46,7 @@ def test_gold_in_three_guesses(admin):
     persian = code.translate(str.maketrans("0123456789", "۰۱۲۳۴۵۶۷۸۹"))
     r = admin.post("/api/games/black-friday/vault/guess", json={"token": s["token"], "guess": persian}).json()
     assert r["done"] and r["solved"] and r["tier"] == 3 and r["tier_name"] == "طلایی"
-    assert r["prize_label"] in ("۵۰٪ تخفیف", "۷۰٪ تخفیف", "۹۰٪ تخفیف") and r["code"].startswith("T")
+    assert r["prize_label"] in ("۵۰٪ تخفیف", "۹۰٪ تخفیف") and r["code"].startswith("T")
     assert admin.post("/api/games/black-friday/vault/guess",
                       json={"token": s["token"], "guess": code}).status_code == 409
 
@@ -108,4 +108,4 @@ def test_panel_checks_tiers(admin):
     full["prizes"][0]["min_score"] = 7
     assert admin.put(f"/api/admin/games/{full['id']}", json=full).status_code == 400
     g = admin.post("/api/admin/games", json={"slug": "vault-2", "kind": "vault", "title": "گاوصندوق"}).json()
-    assert len(g["prizes"]) == 8 and g["settings"]["golden_boost"] == 2
+    assert len(g["prizes"]) == 7 and g["settings"]["golden_boost"] == 2

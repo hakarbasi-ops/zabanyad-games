@@ -168,8 +168,9 @@ def _check_prizes(kind: str, prizes: list[PrizeIn]) -> None:
         if not any(p.weight > 0 for p in active):
             raise HTTPException(400, "حداقل یک گزینه باید شانس بیشتر از صفر داشته باشد.")
     for p in prizes:
-        if p.kind == "percentage" and not 1 <= p.amount <= 100:
-            raise HTTPException(400, f"«{p.label}»: درصد باید بین ۱ تا ۱۰۰ باشد.")
+        if p.kind == "percentage" and p.amount not in db.ALLOWED_PERCENTS:
+            raise HTTPException(400, f"«{p.label}»: فقط این درصدها در مارکت‌ها تعریف شده‌اند: "
+                                     f"{'، '.join(str(x) for x in db.ALLOWED_PERCENTS)}٪.")
         if p.kind == "amount" and p.amount <= 0:
             raise HTTPException(400, f"«{p.label}»: مبلغ تخفیف را وارد کنید.")
         if p.kind == "percentage" and p.max_amount <= 0 and p.active:
@@ -499,7 +500,7 @@ def plays_csv(game_id: int | None = None, status: str | None = None, q: str | No
 class TestCodeIn(BaseModel):
     mobile: str
     type: Literal["percentage", "amount"] = "percentage"
-    amount: int = Field(5, ge=1)
+    amount: int = Field(10, ge=1)
     max_amount: int = Field(1_000_000, ge=1)
     days: int = Field(1, ge=1, le=365)
 
@@ -510,6 +511,8 @@ def test_code(body: TestCodeIn):
     mobile = normalize_mobile(body.mobile)
     if not mobile:
         raise HTTPException(400, "شماره موبایل درست نیست.")
+    if body.type == "percentage" and body.amount not in db.ALLOWED_PERCENTS:
+        raise HTTPException(400, f"فقط این درصدها در مارکت‌ها تعریف شده‌اند: {'، '.join(str(x) for x in db.ALLOWED_PERCENTS)}٪.")
     start, end = code_validity(body.days)
     req = discount.CodeRequest(mobile=mobile, type=body.type, amount=body.amount, max_amount=body.max_amount,
                                usage_count=1, start_date=start, end_date=end)

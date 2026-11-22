@@ -568,7 +568,8 @@
 
   function settingsView() {
     const mobile = el("input", { type: "tel", class: "ltr", placeholder: "09123456789" });
-    const amount = el("input", { type: "number", value: 5, min: 1, max: 100 });
+    // only the percentages that exist as store SKUs
+    const amount = el("select", {}, [10, 20, 30, 40, 50, 90].map((n) => el("option", { value: n }, `${fa(n)}٪`)));
     const days = el("input", { type: "number", value: 1, min: 1 });
     const maxAmount = el("input", { type: "number", value: 1000000, min: 1 });
     const out = el("div");

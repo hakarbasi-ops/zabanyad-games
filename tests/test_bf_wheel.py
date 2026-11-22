@@ -20,7 +20,7 @@ def test_seeded_wheel(admin):
     assert g["kind"] == "wheel" and g["enabled"] and g["starts_at"].startswith("2026-11-26")
     full = admin.get(f"/api/admin/games/{g['id']}").json()
     assert [(p["amount"], p["weight"], p["golden_weight"], p["stock"]) for p in full["prizes"]] == \
-        [(50, 60, 45, None), (60, 25, 30, None), (70, 13, 20, None), (90, 2, 5, 10)]
+        [(30, 60, 45, None), (40, 28, 32, None), (50, 10, 18, None), (90, 2, 5, 10)]
     vault = next(x for x in admin.get("/api/admin/games").json() if x["slug"] == "black-friday")
     assert vault["ends_at"] == "2026-11-28T23:59" and vault["settings"]["jackpot_days"]["2026-11-27"] == 4
 
@@ -95,3 +95,37 @@ def test_report_and_visits(admin):
     day = admin.get(f"/api/admin/games/{full['id']}/report").json()["days"][0]
     assert day["visits"] == 1 and day["plays"] == 1 and day["codes"] == 1 and day["sources"] == {"telegram": 1}
     assert day["visit_sources"] == {"telegram": 1}
+
+
+def test_only_store_percentages(admin):
+    full = _open(admin)
+    full["prizes"][1]["amount"] = 60
+    r = admin.put(f"/api/admin/games/{full['id']}", json=full)
+    assert r.status_code == 400 and "۹۰" not in r.json()["detail"] or "90" in r.json()["detail"]
+    assert admin.post("/api/admin/test-code", json={"mobile": "09120000990", "amount": 5}).status_code == 400
+    assert admin.post("/api/admin/test-code", json={"mobile": "09120000990", "amount": 10}).json()["ok"]
+
+
+def test_upgrade_drops_60_70(tmp_path, monkeypatch):
+    """A v11 database (vault gold 50/70/90, wheel 50/60/70/90) gets only store percentages."""
+    import json, sqlite3
+    from app import config
+    monkeypatch.setattr(config, "DB_PATH", tmp_path / "old.db")
+    db.init()
+    with db.session() as conn:  # put the v11 plans back, as on the server
+        v = conn.execute("SELECT id FROM games WHERE slug='black-friday'").fetchone()[0]
+        conn.execute("UPDATE prizes SET weight=70 WHERE game_id=? AND min_score=3 AND amount=50", (v,))
+        conn.execute("INSERT INTO prizes (game_id,label,kind,amount,max_amount,weight,min_score,sort) VALUES (?,?,?,?,?,?,?,?)",
+                     (v, "۷۰٪ تخفیف", "percentage", 70, db.NO_CAP, 28, 3, 6))
+        w = conn.execute("SELECT id FROM games WHERE slug='black-friday-wheel'").fetchone()[0]
+        conn.execute("DELETE FROM prizes WHERE game_id=?", (w,))
+        for i, a in enumerate(db.OLD_BF_WHEEL_AMOUNTS):
+            conn.execute("INSERT INTO prizes (game_id,label,kind,amount,max_amount,weight,sort) VALUES (?,?,?,?,?,?,?)",
+                         (w, f"{a}", "percentage", a, db.NO_CAP, 10, i))
+        conn.execute("DELETE FROM settings WHERE key='allowed_percents_v12'")
+    db.init()
+    db.init()  # twice: runs once
+    with db.session() as conn:
+        gold = conn.execute("SELECT amount, weight FROM prizes WHERE game_id=? AND deleted=0 AND min_score=3 ORDER BY amount", (v,)).fetchall()
+        wheel = [r[0] for r in conn.execute("SELECT amount FROM prizes WHERE game_id=? AND deleted=0 ORDER BY sort", (w,))]
+    assert [tuple(r) for r in gold] == [(50, 98), (90, 2)] and wheel == [30, 40, 50, 90]

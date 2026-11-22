@@ -152,7 +152,7 @@ def test_live_api_call(monkeypatch):
 
 
 def test_api_log_and_validity(admin):
-    r = admin.post("/api/admin/test-code", json={"mobile": "09120000099", "amount": 5}).json()
+    r = admin.post("/api/admin/test-code", json={"mobile": "09120000099", "amount": 10}).json()
     assert r["ok"] and r["valid_from"].endswith("00:00:00")
     rows = admin.get("/api/admin/api-log").json()
     assert rows and "09120000099" in rows[0]["request"] and '"max_amount": 1000000' in rows[0]["request"]

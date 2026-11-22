@@ -96,6 +96,13 @@ Out of chances → bottom sheet pushing the invite (when referrals are on) + lin
 - Vault (v8) now ends 7 Azar too (`db.black_friday_v9` moves 11-29 → 11-28 once on old installs and adds jackpot_days).
 - Marketing guide for both games: `docs/black-friday-fa.md`.
 
+## Allowed percentages (v12, owner: store SKUs)
+Zabanyad's discounts exist in the app stores only as 10/20/30/40/50/90%: `db.ALLOWED_PERCENTS`; the panel refuses any
+other percentage (prizes and the test-code form, now a select). `db.allowed_percents_v12` (once): vault gold 70% removed,
+its weight moved to gold 50% (gold = 50 (98) + 90 (2)); the BF wheel, if still on the v9 plan 50/60/70/90, becomes
+`BF_WHEEL_PLAN` 30/40/50/90 = weights 60/28/10/2, golden 45/32/18/5 (owner chose it; min 30% even though Mark's spec
+wanted ≥ the campaign's 50%). Vault plan in the section above is outdated on the gold tier.
+
 ## Prizes and chances (owner-approved plan, v5)
 - Wheel/scratch (6 slices, NO "empty" prize, min 10%): weights per 1000 → 10%:500, 20%:280, 30%:140, 40%:60,
   50%:19, 90%:1 (0.1%, no stock cap). Quiz ladder: 0-1 correct 10%, 2→20, 3→30, 4→40, 5→50. max_amount =
