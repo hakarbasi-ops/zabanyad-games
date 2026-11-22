@@ -102,6 +102,8 @@ other percentage (prizes and the test-code form, now a select). `db.allowed_perc
 its weight moved to gold 50% (gold = 50 (98) + 90 (2)); the BF wheel, if still on the v9 plan 50/60/70/90, becomes
 `BF_WHEEL_PLAN` 30/40/50/90 = weights 60/28/10/2, golden 45/32/18/5 (owner chose it; min 30% even though Mark's spec
 wanted ≥ the campaign's 50%). Vault plan in the section above is outdated on the gold tier.
+v13: every code is single use (owner: one subscription purchase): `_issue` always sends usage_count 1, the panel
+shows «۱ بار» instead of an input and saves 1.
 
 ## Prizes and chances (owner-approved plan, v5)
 - Wheel/scratch (6 slices, NO "empty" prize, min 10%): weights per 1000 → 10%:500, 20%:280, 30%:140, 40%:60,

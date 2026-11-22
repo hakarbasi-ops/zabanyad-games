@@ -288,7 +288,7 @@
           el("td", {}, kindSel),
           el("td", {}, none ? "—" : rialField(p, "amount", p.kind === "amount")),
           el("td", {}, none ? "—" : rialField(p, "max_amount", true)),
-          el("td", {}, none ? "—" : bind("usage_count", el("input", { type: "number", min: 1, value: p.usage_count, style: "width:70px" }), n)),
+          el("td", { class: "small muted" }, none ? "—" : "۱ بار"),   // every code is good for one purchase only
           isVault ? el("td", {}, bind("min_score", el("select", {}, Object.entries(TIERS).map(([k, v]) =>
             el("option", { value: k, selected: Number(p.min_score) === Number(k) }, v))), n)) : "",
           isScored
@@ -440,7 +440,7 @@
         settings: { color: f.color.value },
         prizes: prizes.map((p) => ({
           id: p.id, label: p.label, kind: p.kind, amount: Number(p.amount) || 0, max_amount: Number(p.max_amount) || 0,
-          usage_count: Number(p.usage_count) || 1, weight: Number(p.weight) || 0, stock: p.kind === "none" ? null : p.stock,
+          usage_count: 1, weight: Number(p.weight) || 0, stock: p.kind === "none" ? null : p.stock,
           golden_weight: p.golden_weight === "" || p.golden_weight === undefined ? null : p.golden_weight,
           min_score: Number(p.min_score) || 0, color: p.color || "", active: !!p.active,
         })),

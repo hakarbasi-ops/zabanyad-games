@@ -347,7 +347,7 @@ def update_game(game_id: int, body: GameIn):
             existing = {p["id"] for p in game["prizes"]}
             kept = set()
             for i, p in enumerate(body.prizes):
-                values = (p.label, p.kind, p.amount, p.max_amount, p.usage_count, p.weight, p.golden_weight, p.stock,
+                values = (p.label, p.kind, p.amount, p.max_amount, 1, p.weight, p.golden_weight, p.stock,
                           p.min_score, p.color or db.DEFAULT_COLORS[i % len(db.DEFAULT_COLORS)], i, int(p.active))
                 if p.id in existing:
                     kept.add(p.id)

@@ -129,3 +129,16 @@ def test_upgrade_drops_60_70(tmp_path, monkeypatch):
         gold = conn.execute("SELECT amount, weight FROM prizes WHERE game_id=? AND deleted=0 AND min_score=3 ORDER BY amount", (v,)).fetchall()
         wheel = [r[0] for r in conn.execute("SELECT amount FROM prizes WHERE game_id=? AND deleted=0 ORDER BY sort", (w,))]
     assert [tuple(r) for r in gold] == [(50, 98), (90, 2)] and wheel == [30, 40, 50, 90]
+
+
+def test_codes_are_single_use(admin, monkeypatch):
+    """Every code is asked for usage_count 1, even if a prize row says otherwise."""
+    from app import discount
+    sent = []
+    real = discount.generate
+    monkeypatch.setattr(discount, "generate", lambda req: (sent.append(req.usage_count), real(req))[1])
+    with db.session() as conn:
+        conn.execute("UPDATE prizes SET usage_count=5")
+    _open(admin)
+    admin.post(f"/api/games/{SLUG}/play", json={"mobile": "09120000995"})
+    assert sent == [1]

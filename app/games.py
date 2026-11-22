@@ -235,7 +235,8 @@ def _issue(conn, game: dict, play_id: int, prize: dict, mobile: str) -> dict:
     req = discount.CodeRequest(
         mobile=mobile, type=prize["kind"], amount=prize["amount"],
         max_amount=prize["max_amount"] or (prize["amount"] if prize["kind"] == "amount" else 0),
-        usage_count=max(prize["usage_count"], 1), start_date=start, end_date=end,
+        usage_count=1,  # owner: every code is good for one subscription purchase, whatever the prize row says
+        start_date=start, end_date=end,
     )
     try:
         code = discount.generate(req)
