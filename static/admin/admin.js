@@ -223,10 +223,15 @@
     const dt = (key) => {
       const input = (f[key] = el("input", { type: "datetime-local", value: (game[key] || "").replace(" ", "T").slice(0, 16) }));
       const hint = el("span", { class: "small" });
-      const upd = () => (hint.textContent = input.value ? jalaliDate(input.value.replace("T", " "), true) : "بدون محدودیت");
+      // a half-erased date (one Backspace clears only one part) is "invalid": say so instead of failing silently
+      const upd = () => (hint.textContent = input.validity.badInput ? "تاریخ ناقص است؛ کاملش کنید یا «بدون تاریخ» را بزنید"
+        : input.value ? jalaliDate(input.value.replace("T", " "), true) : "بدون محدودیت");
       input.addEventListener("input", upd);
+      input.addEventListener("change", upd);
+      const clear = el("button", { type: "button", class: "btn ghost", style: "padding:2px 10px;font-size:12px",
+        onclick: () => { input.value = ""; upd(); } }, "بدون تاریخ");
       upd();
-      return [input, hint];
+      return [input, el("div", { class: "row between" }, hint, clear)];
     };
     f.enabled = el("input", { type: "checkbox", checked: !!game.enabled });
     const isCampaign = game.settings.theme === "bf";        // Black Friday wheel: own spins, fixed code date, focus
@@ -368,7 +373,7 @@
     }
     const msg = el("div");
     const save = el("button", { class: "btn" }, "ذخیره");
-    const form = el("form", {},
+    const form = el("form", { novalidate: "" },
       el("div", { class: "row between", style: "margin-bottom:12px" },
         el("h1", { style: "margin:0" }, `${ICON[game.kind]} ${game.title}`),
         el("div", { class: "row" },
@@ -445,6 +450,11 @@
 
     form.addEventListener("submit", async (e) => {
       e.preventDefault();
+      const half = ["starts_at", "ends_at"].find((k) => f[k].validity.badInput);
+      if (half) {
+        msg.replaceChildren(el("span", { class: "msg bad" }, `تاریخ «${half === "starts_at" ? "شروع" : "پایان"}» ناقص است. کاملش کنید، یا اگر تاریخ نمی‌خواهید دکمه‌ی «بدون تاریخ» را بزنید. ذخیره نشد.`));
+        return;
+      }
       const body = {
         title: f.title.value, subtitle: f.subtitle.value, rules: f.rules.value, enabled: f.enabled.checked,
         starts_at: f.starts_at.value || null, ends_at: f.ends_at.value || null,
