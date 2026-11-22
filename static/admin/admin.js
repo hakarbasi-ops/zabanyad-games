@@ -110,8 +110,7 @@
         chart(stats.days)),
       el("div", { class: "card" }, el("h2", {}, "بازی‌ها"),
         el("div", { class: "grid" }, games.map((g) => el("a", { href: `#/games/${g.id}`, class: "stat", style: "text-decoration:none;color:inherit" },
-          el("div", { class: "row between" }, el("strong", {}, `${ICON[g.kind]} ${g.title}`),
-            g.open ? el("span", { class: "badge ok" }, "فعال") : el("span", { class: "badge off" }, "غیرفعال")),
+          el("div", { class: "row between" }, el("strong", {}, `${ICON[g.kind]} ${g.title}`), statusBadge(g)),
           el("span", {}, `${fa(g.plays)} بازی · ${fa(g.codes)} کد`))))),
       el("div", { class: "card" }, el("h2", {}, "جایزه‌ها"),
         el("div", { class: "table-wrap" }, el("table", {},
@@ -185,12 +184,24 @@
       el("div", { class: "grid", style: "margin-bottom:16px" }, games.map((g) =>
         el("div", { class: "card game-card", style: "margin:0" },
           el("div", { class: "row between" }, el("span", { class: "icon" }, ICON[g.kind]),
-            g.open ? el("span", { class: "badge ok" }, "فعال") : el("span", { class: "badge off" }, g.enabled ? g.message : "غیرفعال")),
+            statusBadge(g)),
           el("h3", {}, g.title),
           el("span", { class: "muted small" }, `${KIND[g.kind]} · ${fa(g.plays)} بازی · ${fa(g.codes)} کد`),
           el("div", { class: "row" }, el("a", { class: "btn", href: `#/games/${g.id}` }, "تنظیمات"),
             el("a", { class: "btn light", href: `/g/${g.slug}`, target: "_blank" }, "دیدن بازی"))))),
       add);
+  }
+
+  // on / off / opens by itself at its start time / ended / paused during Black Friday
+  function statusBadge(g) {
+    const now = Date.now();
+    const at = (v) => (v ? new Date(v.replace(" ", "T") + "+03:30").getTime() : null);
+    if (!g.enabled) return el("span", { class: "badge off" }, "خاموش");
+    if (g.paused_by) return el("span", { class: "badge wait", title: `تا وقتی «${g.paused_by}» باز است` }, "موقتاً بسته (جمعه سیاه)");
+    if (g.open) return el("span", { class: "badge ok" }, "فعال");
+    if (at(g.starts_at) && at(g.starts_at) > now) return el("span", { class: "badge wait" }, `خودکار باز می‌شود: ${jalaliDate(g.starts_at, true)}`);
+    if (at(g.ends_at) && at(g.ends_at) < now) return el("span", { class: "badge off" }, "تمام شده");
+    return el("span", { class: "badge off" }, g.message || "غیرفعال");
   }
 
   // ------------------------------------------------------------ game editor
@@ -365,7 +376,9 @@
           el("button", { type: "button", class: "btn light", onclick: async (e) => { e.currentTarget.textContent = (await copy(url)) ? "لینک کپی شد ✓" : url; } }, "کپی لینک"))),
       el("div", { class: "card" },
         el("div", { class: "row between" }, el("h2", {}, "اطلاعات بازی"),
-          el("label", { class: "check" }, f.enabled, "بازی فعال باشد")),
+          el("div", { class: "row" }, statusBadge(game), el("label", { class: "check" }, f.enabled, "بازی فعال باشد"))),
+        el("p", { class: "muted small", style: "margin:4px 0 0" },
+          "«فعال» یعنی بازی روشن است. اگر «شروع» گذاشته باشید، بازی خودش سر همان ساعت باز می‌شود و در «پایان» بسته می‌شود."),
         el("p", { class: "muted small ltr", style: "margin-top:0" }, url),
         el("div", { class: "form-grid" },
           el("label", { class: "f" }, el("span", {}, "عنوان"), text("title")),

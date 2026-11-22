@@ -147,6 +147,9 @@ def _game_full(conn, game_id: int) -> dict:
     if not game:
         raise HTTPException(404, "بازی پیدا نشد.")
     game["prizes"] = games.prizes_of(conn, game_id, active_only=False)
+    game["open"], game["message"] = games.availability(game)
+    focus = games.blocked_by_focus(conn, game) if game["open"] else None
+    game["paused_by"] = focus["title"] if focus else None
     if game["kind"] in games.SCORED_KINDS:
         game["questions"] = db.rows(conn.execute("SELECT * FROM questions WHERE game_id=? ORDER BY id", (game_id,)))
     return game
@@ -260,6 +263,8 @@ def list_games():
         for g in db.rows(conn.execute("SELECT * FROM games ORDER BY id")):
             ok, message = games.availability(g)
             g["open"], g["message"] = ok, message
+            focus = games.blocked_by_focus(conn, g) if ok else None
+            g["paused_by"] = focus["title"] if focus else None  # Black Friday: open but paused by the focus game
             g.update(_game_stats(conn, g["id"]))
             out.append(g)
         return out
