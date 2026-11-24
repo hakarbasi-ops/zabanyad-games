@@ -564,6 +564,32 @@ def jackpot_winners(conn, min_amount: int = 90, limit: int = 40) -> list[dict]:
              if r["finished_at"] else ""} for r in rows]
 
 
+ACTIVITY_MIN_PLAYERS = 30   # «امروز n نفر بازی کردن» shows only from this many players up (a tiny number looks bad)
+
+
+def activity(conn, limit: int = 12) -> dict:
+    """Real activity for the boards on the home and game pages: last winners of every prize (masked mobiles, 90%+
+    marked big), today's players, and the 90% codes still waiting in running Black Friday games. Nothing is invented."""
+    now = utcnow()
+    rows = conn.execute(
+        "SELECT p.mobile, p.prize_label, p.finished_at, g.title, z.amount, z.kind FROM plays p JOIN games g ON g.id=p.game_id"
+        " LEFT JOIN prizes z ON z.id=p.prize_id WHERE p.status='won' ORDER BY p.id DESC LIMIT ?", (limit,)).fetchall()
+    recent = [{"mobile": mask_mobile(r["mobile"]), "prize": r["prize_label"], "game": r["title"],
+               "big": r["kind"] == "percentage" and (r["amount"] or 0) >= 90,
+               "ago": int((now - datetime.fromisoformat(r["finished_at"])).total_seconds()) if r["finished_at"] else 0}
+              for r in rows]
+    players = conn.execute("SELECT COUNT(DISTINCT mobile) FROM plays WHERE status IN ('won','lost') AND created_at >= ?",
+                           (local_day_start_utc(),)).fetchone()[0]
+    jackpots = []
+    for g in db.rows(conn.execute("SELECT * FROM games WHERE enabled=1 ORDER BY id")):
+        end = parse_local(g["ends_at"])
+        if not g["settings"].get("jackpot_days") or (end and local_now() > end):
+            continue
+        for item in _limited(prizes_of(conn, g["id"]), g):
+            jackpots.append({"game": g["title"], "slug": g["slug"], **item})
+    return {"recent": recent, "players_today": players if players >= ACTIVITY_MIN_PLAYERS else None, "jackpots": jackpots}
+
+
 def vault_start(conn, slug: str, mobile: str, ip: str, source: str | None = None) -> dict:
     game = get_game(conn, slug)
     if game["kind"] != "vault":

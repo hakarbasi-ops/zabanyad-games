@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from app import db, games, wallet
+from app import db, games, util, wallet
 from app.util import TZ, local_now
 from conftest import enable
 
@@ -142,3 +142,26 @@ def test_codes_are_single_use(admin, monkeypatch):
     _open(admin)
     admin.post(f"/api/games/{SLUG}/play", json={"mobile": "09120000995"})
     assert sent == [1]
+
+
+def test_activity_board_is_real(admin):
+    """Only real plays: last winners (90% marked big), players today only from ACTIVITY_MIN_PLAYERS up, codes waiting."""
+    a = admin.get("/api/activity").json()
+    assert a["recent"] == [] and a["players_today"] is None
+    assert any(j["slug"] == "black-friday-wheel" and j["left"] == 10 for j in a["jackpots"])
+    full = _open(admin)
+    for p in full["prizes"]:
+        p["weight"] = 1 if p["amount"] == 90 else 0
+        p["golden_weight"] = None
+    admin.put(f"/api/admin/games/{full['id']}", json=full)
+    admin.post(f"/api/games/{SLUG}/play", json={"mobile": "09120000997"})
+    a = admin.get("/api/activity").json()
+    assert a["recent"][0]["mobile"] == "0912***0997" and a["recent"][0]["big"] is True
+    w = next(j for j in a["jackpots"] if j["slug"] == SLUG)
+    assert w["left"] == 9 and w["left_today"] == 2
+    with db.session() as conn:  # enough players today → the count shows
+        g = conn.execute("SELECT id FROM games WHERE slug='wheel'").fetchone()[0]
+        for i in range(games.ACTIVITY_MIN_PLAYERS):
+            conn.execute("INSERT INTO plays (game_id, mobile, status, created_at) VALUES (?,?,?,?)",
+                         (g, f"0913{i:07d}", "lost", util.now_iso()))
+    assert admin.get("/api/activity").json()["players_today"] == games.ACTIVITY_MIN_PLAYERS + 1

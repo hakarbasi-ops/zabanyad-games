@@ -167,5 +167,38 @@
       `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${ICONS[name] || ""}</svg>` });
   }
 
-  window.ZG = { fa, money, jalaliDate, api, el, store, copy, src: () => src, visit, dayName, art, icon, ICONS };
+  // «آخرین برنده‌ها»: real winners of every prize (90% ones in gold), today's players, 90% codes still waiting.
+  // Refreshes every 30 s. Hidden while there is nothing real to show.
+  function activityBoard() {
+    const box = el("section", { class: "jackpot activity hidden" });
+    const ago = (s) => (s < 60 ? "همین الان" : s < 3600 ? `${fa(Math.floor(s / 60))} دقیقه پیش`
+      : s < 86400 ? `${fa(Math.floor(s / 3600))} ساعت پیش` : `${fa(Math.floor(s / 86400))} روز پیش`);
+    async function load() {
+      let a;
+      try { a = await api("/api/activity"); } catch (e) { return; }
+      const cards = a.jackpots.map((j) => {
+        const name = String(j.label).split(" ")[0];
+        let text;
+        if (j.left === 0) text = `کدهای ${name} تموم شد`;
+        else if (j.left_today > 0) text = `${fa(j.left_today)} کد ${name} امروز مونده`;
+        else if (j.next_day) text = `${fa(j.left)} کد ${name} منتظر برنده‌ست، از ${dayName(j.next_day)}`;
+        else text = `${fa(j.left)} کد ${name} منتظر برنده‌ست`;
+        return el("a", { class: "jp-card", href: `/g/${encodeURIComponent(j.slug)}` }, icon("trophy"), el("b", {}, text), el("small", {}, j.game));
+      });
+      if (!a.recent.length && !cards.length) return box.classList.add("hidden");
+      box.replaceChildren(
+        el("div", { class: "act-head" }, el("h3", {}, icon("sparkle"), " آخرین برنده‌ها"),
+          a.players_today ? el("span", { class: "act-count" }, `امروز ${fa(a.players_today)} نفر بازی کردن`) : ""),
+        ...cards,
+        a.recent.length ? el("ol", {}, a.recent.map((w) => el("li", { class: w.big ? "big" : "" },
+          el("span", { class: "m" }, fa(w.mobile)), el("b", { class: "p" }, w.prize), el("span", { class: "g" }, w.game),
+          el("small", {}, ago(w.ago))))) : el("p", {}, "اولین برنده‌ی امروز می‌تونی تو باشی!"));
+      box.classList.remove("hidden");
+    }
+    load();
+    const timer = setInterval(() => (document.body.contains(box) ? load() : clearInterval(timer)), 30000);
+    return box;
+  }
+
+  window.ZG = { fa, money, jalaliDate, api, el, store, copy, src: () => src, visit, dayName, art, icon, ICONS, activityBoard };
 })();

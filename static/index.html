@@ -31,13 +31,9 @@
       const list = document.getElementById("list");
       const pics = { wheel: "wheel", scratch: "ticket", quiz: "quiz", chest: "chest", slot: "slot", wordle: "wordle", vault: "vault" };
       try {
-        const { games, focus, jackpot } = await api("/api/games");
+        const { games, focus } = await api("/api/games");
         if (focus) list.before(el("a", { class: "focus-banner", href: `/g/${encodeURIComponent(focus.slug)}` }, focus.message || focus.title, " ←"));
-        if (jackpot && jackpot.length) {
-          list.after(el("section", { class: "jackpot" }, el("h3", {}, icon("trophy"), " برنده‌های ۹۰٪ جمعه سیاه"),
-            el("ol", {}, jackpot.slice(0, 10).map((w) => el("li", {}, el("span", { class: "m" }, fa(w.mobile)),
-              el("span", {}, w.game), el("small", {}, jalaliDate(w.at, true)))))));
-        }
+        list.after(ZG.activityBoard());
         list.replaceChildren(...(games.length ? games.map((g) =>
           el("a", { class: `game-link kind-${g.kind} ${g.theme === "bf" ? "bf-card" : ""}`, href: `/g/${encodeURIComponent(g.slug)}` },
             g.theme === "bf" ? el("span", { class: "tag" }, "BLACK FRIDAY") : "",

@@ -105,6 +105,14 @@ wanted ≥ the campaign's 50%). Vault plan in the section above is outdated on t
 v13: every code is single use (owner: one subscription purchase): `_issue` always sends usage_count 1, the panel
 shows «۱ بار» instead of an input and saves 1.
 
+## Activity board (v16)
+Owner asked for fake 90% winners to fill the empty board: refused (deceptive in a real-prize promotion, and the
+90% codes only exist from 5 Azar). Instead `GET /api/activity` (`games.activity`): last 12 real winners of every prize
+(masked, 90%+ flagged `big` → gold row), distinct players today only when ≥ `ACTIVITY_MIN_PLAYERS` (30), and the
+stocked prizes still waiting in running jackpot games («۱۰ کد ۹۰٪ منتظر برنده‌ست، از پنجشنبه ۵ آذر» / «n کد ۹۰٪ امروز
+مونده»). Rendered by `ZG.activityBoard()` (common.js, refresh 30 s) on the home page and every game page; replaced the
+90%-only board. Never add invented rows.
+
 ## Prizes and chances (owner-approved plan, v5)
 - Wheel/scratch (6 slices, NO "empty" prize, min 10%): weights per 1000 → 10%:500, 20%:280, 30%:140, 40%:60,
   50%:19, 90%:1 (0.1%, no stock cap). Quiz ladder: 0-1 correct 10%, 2→20, 3→30, 4→40, 5→50. max_amount =

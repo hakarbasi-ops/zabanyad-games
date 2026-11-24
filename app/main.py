@@ -220,6 +220,12 @@ def winners(slug: str):
         return games.recent_winners(conn, games.get_game(conn, slug))
 
 
+@app.get("/api/activity")
+def activity():
+    with db.session() as conn:
+        return games.activity(conn)
+
+
 @app.get("/api/jackpot-winners")
 def jackpot_winners():
     with db.session() as conn:

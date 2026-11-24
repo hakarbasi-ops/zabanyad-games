@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 130 100">
+<defs>
+<radialGradient id="in" cx=".5" cy=".55" r=".6"><stop offset="0" stop-color="#FFF3C4"/><stop offset=".35" stop-color="#FFC53D"/><stop offset="1" stop-color="#7A5600"/></radialGradient>
+<linearGradient id="door" x1="1" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#55556A"/><stop offset="1" stop-color="#22222B"/></linearGradient>
+<linearGradient id="bar" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#FFE9A0"/><stop offset="1" stop-color="#E09A00"/></linearGradient>
+<radialGradient id="glow" cx=".5" cy=".5" r=".5"><stop offset="0" stop-color="#FFE08A" stop-opacity=".9"/><stop offset="1" stop-color="#FFC53D" stop-opacity="0"/></radialGradient>
+</defs>
+<ellipse cx="74" cy="96" rx="40" ry="3.5" fill="#000" opacity=".35"/>
+<rect x="38" y="8" width="84" height="84" rx="9" fill="#2C2C36"/>
+<rect x="45" y="15" width="70" height="70" rx="5" fill="url(#in)"/>
+<circle cx="80" cy="52" r="34" fill="url(#glow)"/>
+<path d="M45 58h70" stroke="#9A6E00" stroke-width="2" opacity=".6"/>
+<g stroke="#B37A00" stroke-width=".8">
+<path d="M56 58l3-8h14l3 8Z" fill="url(#bar)"/><path d="M76 58l3-8h14l3 8Z" fill="url(#bar)"/><path d="M66 50l3-8h14l3 8Z" fill="url(#bar)"/>
+<path d="M54 85l3-8h14l3 8Z" fill="url(#bar)"/><path d="M74 85l3-8h14l3 8Z" fill="url(#bar)"/><path d="M94 85l3-8h14l3 8Z" fill="url(#bar)"/>
+<circle cx="99" cy="36" r="6" fill="url(#bar)"/><circle cx="58" cy="34" r="5" fill="url(#bar)"/>
+</g>
+<path d="M45 15 14 6v88l31-9Z" fill="url(#door)" stroke="#1B1B22" stroke-width="1.5" stroke-linejoin="round"/>
+<path d="M41 22 19 15.5v69L41 78Z" fill="none" stroke="#fff" stroke-opacity=".07" stroke-width="1.5"/>
+<ellipse cx="30" cy="50" rx="8" ry="14" fill="#2A2A33" stroke="#FFC53D" stroke-width="2.6"/>
+<ellipse cx="30" cy="50" rx="3.2" ry="5.6" fill="#50505E" stroke="#FFC53D" stroke-width="1.4"/>
+<path d="M30 50l2.2-4.6" stroke="#FFC53D" stroke-width="2" stroke-linecap="round"/>
+<rect x="40" y="92" width="10" height="5" rx="2" fill="#2C2C36"/><rect x="110" y="92" width="10" height="5" rx="2" fill="#2C2C36"/>
+</svg>

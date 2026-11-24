@@ -554,3 +554,25 @@ body {
 .wallet-invite .ico, .btn .ico { margin-inline-end: 2px; }
 .jackpot h3 .ico { color: #e0a800; }
 .theme-bf .jackpot h3 .ico { color: var(--gold); }
+
+/* activity board: real last winners, today's players, 90% codes waiting */
+.activity .act-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 8px; }
+.activity .act-head h3 { margin: 0; }
+.act-count { font-size: 12px; font-weight: 700; color: var(--success); background: #e3f9ee; padding: 3px 10px; border-radius: 99px; white-space: nowrap; }
+.jp-card { display: flex; align-items: center; gap: 8px; text-decoration: none; margin-bottom: 8px; padding: 10px 12px; border-radius: 12px;
+  background: linear-gradient(90deg, #fff3cf, #ffe7a8); color: #6b4b00; }
+.jp-card .ico { color: #c98a00; font-size: 18px; }
+.jp-card b { font-size: 14px; font-weight: 800; }
+.jp-card small { margin-inline-start: auto; font-size: 11px; opacity: .75; }
+.activity li { display: grid; grid-template-columns: auto auto 1fr auto; gap: 8px; background: var(--light-3); }
+.activity li .p { color: var(--brand); font-weight: 800; white-space: nowrap; }
+.activity li .g { color: var(--dark-4); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.activity li.big { background: linear-gradient(90deg, #fff3cf, #ffe39a); box-shadow: 0 0 0 1.5px #ffc53d; }
+.activity li.big .p { color: #a86b00; }
+.theme-bf .act-count { background: rgba(6,194,112,.15); color: #3ee39a; }
+.theme-bf .jp-card { background: linear-gradient(90deg, #2b2210, #3a2c0b); color: var(--gold); }
+.theme-bf .jp-card .ico { color: var(--gold); }
+.theme-bf .activity li { background: #1d1d26; }
+.theme-bf .activity li .g { color: var(--bf-muted); }
+.theme-bf .activity li.big { background: linear-gradient(90deg, #3a2c0b, #4a3a12); box-shadow: 0 0 0 1.5px var(--gold); }
+.theme-bf .activity li.big .p { color: var(--gold); }

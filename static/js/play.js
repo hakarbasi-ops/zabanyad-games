@@ -43,7 +43,7 @@
         "حالت آزمایشی: کدهای تخفیف این صفحه ساختگی‌اند (با T شروع می‌شوند) و در زبانیاد کار نمی‌کنند."));
     }
     if (!info.own_spins) app.before(walletBar);   // games with their own daily spins do not use the shared chances
-    if (info.theme === "bf" || info.kind === "vault") app.after(jackpotBoard(true));
+    app.after(ZG.activityBoard());
     const saved = store.get("zg:otp");
     if (saved && saved.until > Date.now()) refreshWallet(saved.mobile, saved.token);
   }
@@ -845,20 +845,6 @@
       el("h3", {}, info.message),
       el("p", {}, "بقیه‌ی بازی‌ها بعد از جمعه سیاه دوباره باز می‌شن."),
       el("a", { class: "btn", href: `/g/${encodeURIComponent(info.focus.slug)}` }, `رفتن به ${info.focus.title}`)));
-  }
-
-  // «برنده‌های ۹۰٪»: everyone who won the top prize, masked mobiles
-  function jackpotBoard(showEmpty) {
-    const box = el("section", { class: "jackpot hidden" });
-    api("/api/jackpot-winners").then(({ winners }) => {
-      if (!winners.length && !(showEmpty && info && info.open)) return;
-      box.replaceChildren(el("h3", {}, icon("trophy"), " برنده‌های ۹۰٪ جمعه سیاه"),
-        winners.length ? el("ol", {}, winners.map((w) => el("li", {},
-          el("span", { class: "m" }, fa(w.mobile)), el("span", {}, w.game), el("small", {}, jalaliDate(w.at, true)))))
-          : el("p", {}, "هنوز کسی ۹۰٪ نبرده؛ شاید تو اولین نفر باشی!"));
-      box.classList.remove("hidden");
-    }).catch(() => {});
-    return box;
   }
 
   function renderVaultTeaser() {
